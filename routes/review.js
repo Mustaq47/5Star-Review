@@ -78,9 +78,11 @@ function reviewPage(client, tags) {
 
 ${isCoolSpicy ? `
 .bp {
-  background: linear-gradient(135deg, #1d4ed8 0%, #dc2626 100%) !important;
-  border-color: rgba(255,255,255,0.2) !important;
-  box-shadow: 0 6px 24px rgba(220,38,38,0.32) !important;
+  background: linear-gradient(135deg, #0284c7 0%, #38bdf8 28%, #fb7185 72%, #f43f5e 100%) !important;
+  border-color: rgba(255,255,255,0.28) !important;
+  box-shadow: 0 6px 24px rgba(2,132,199,0.28), 0 3px 12px rgba(244,63,94,0.25) !important;
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.18);
 }
 .root.light .o1{background:radial-gradient(circle,rgba(29,78,216,0.26) 0%,transparent 70%) !important}
 .root.dark  .o1{background:radial-gradient(circle,rgba(29,78,216,0.36) 0%,transparent 70%) !important}
