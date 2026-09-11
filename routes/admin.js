@@ -507,6 +507,11 @@ function clientFormPage(client, error) {
 
 // ── QR STUDIO & STANDEE GENERATOR (7 THEMES + APPLE DESIGN) ─────────
 function qrPage(client, qrDataUrl, url, qrSvg='') {
+  const isImageLogo = client.emoji && (client.emoji.startsWith('/') || client.emoji.startsWith('http') || client.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i));
+  const logoHeaderHtml = isImageLogo
+    ? `<img src="${esc(client.emoji)}" alt="${esc(client.business_name)}" style="width:72px;height:72px;object-fit:contain;border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,0.12);display:inline-block">`
+    : `<span style="font-size:40px;line-height:1;display:inline-block">${esc(client.emoji || '🏪')}</span>`;
+
   const extraHead = `
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
@@ -566,7 +571,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
 
       /* THEME: Apple Minimalist Glass */
       #standeeCard.theme-apple {
-        background: rgba(255, 255, 255, 0.88);
+        background: rgba(255, 255, 255, 0.92);
         backdrop-filter: blur(28px) saturate(180%);
         -webkit-backdrop-filter: blur(28px) saturate(180%);
         border: 1px solid rgba(255, 255, 255, 0.95);
@@ -600,10 +605,10 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
 
       /* THEME: Glassmorphism Ocean */
       #standeeCard.theme-glass {
-        background: linear-gradient(135deg, rgba(14, 165, 233, 0.35) 0%, rgba(2, 132, 199, 0.45) 100%);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.45) 0%, rgba(2, 132, 199, 0.55) 100%);
         backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-        border: 1px solid rgba(255, 255, 255, 0.4); color: #ffffff;
-        box-shadow: 0 20px 50px rgba(2, 132, 199, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.45); color: #ffffff;
+        box-shadow: 0 20px 50px rgba(2, 132, 199, 0.35);
       }
       #standeeCard.theme-glass .card-title { color: #ffffff; text-shadow: 0 2px 10px rgba(0,0,0,0.15); }
       #standeeCard.theme-glass .card-sub { color: #e0f2fe; }
@@ -651,13 +656,13 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       /* QR Canvas wrapper */
       .qr-box {
         display: inline-block; padding: 12px; border-radius: 20px;
-        margin: 16px 0; position: relative; transition: all 0.2s var(--ease-spring);
+        margin: 14px 0; position: relative; transition: all 0.2s var(--ease-spring);
       }
-      .qr-canvas-el { display: block; border-radius: 12px; max-width: 170px; height: auto; }
+      .qr-canvas-el { display: block; border-radius: 12px; max-width: 175px; height: auto; margin: 0 auto; }
 
-      .card-emoji-header { font-size: 38px; line-height: 1; margin-bottom: 8px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12)); }
+      .card-emoji-header { margin-bottom: 8px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12)); }
       .card-title { font-size: 20px; font-weight: 700; line-height: 1.25; margin-bottom: 4px; }
-      .card-sub { font-size: 12.5px; line-height: 1.45; max-width: 250px; margin: 0 auto 10px; }
+      .card-sub { font-size: 12.5px; line-height: 1.45; max-width: 250px; margin: 0 auto 8px; }
       .tag-badge {
         display: inline-flex; align-items: center; gap: 4px;
         font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
@@ -669,20 +674,12 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       }
       .stars-row { color: #f59e0b; font-size: 15px; margin: 4px 0 6px; letter-spacing: 2px; }
 
-      /* Format toggle */
-      .fmt-group { display: flex; gap: 6px; background: var(--s2); padding: 4px; border-radius: 12px; border: 1px solid var(--b1); }
-      .fmt-btn {
-        flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 500; border-radius: 8px;
-        background: transparent; border: none; color: var(--t2); cursor: pointer; transition: all 0.15s;
-        display: flex; align-items: center; justify-content: center; gap: 5px;
-      }
-      .fmt-btn.active { background: var(--s3); color: var(--t1); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
-
       /* Icon Options */
       .icon-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
       .icon-opt {
         padding: 8px 4px; border-radius: 10px; background: var(--s2); border: 1px solid var(--b1);
         color: var(--t1); cursor: pointer; text-align: center; font-size: 16px; transition: all 0.15s;
+        display: flex; align-items: center; justify-content: center; min-height: 38px;
       }
       .icon-opt.active { background: rgba(124,77,255,0.2); border-color: var(--accent); }
 
@@ -708,7 +705,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
     <div class="page-hdr">
       <div>
         <div class="page-title">QR Studio &amp; Table Standee Generator</div>
-        <div class="page-sub">${esc(client.emoji)} ${esc(client.business_name)} · 7 Design Themes with Live Apple-Grade Preview</div>
+        <div class="page-sub">${esc(client.business_name)} · 7 Design Themes with Live Apple-Grade Preview</div>
       </div>
       <div style="display:flex;gap:8px">
         <a href="/r/${client.slug}" target="_blank" class="btn btn-ghost"><i class="ti ti-external-link"></i> Live Review Page</a>
@@ -776,7 +773,9 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
               <div class="form-group">
                 <label class="form-label">Center QR Icon</label>
                 <div class="icon-grid">
-                  <button type="button" class="icon-opt active" onclick="setCenterIcon('${esc(client.emoji)}', this)">${client.emoji}</button>
+                  <button type="button" class="icon-opt active" onclick="setCenterIcon('${isImageLogo ? 'logo' : esc(client.emoji)}', this)">
+                    ${isImageLogo ? `<img src="${esc(client.emoji)}" style="width:20px;height:20px;object-fit:contain;vertical-align:middle">` : (client.emoji||'🏪')}
+                  </button>
                   <button type="button" class="icon-opt" onclick="setCenterIcon('⭐', this)">⭐</button>
                   <button type="button" class="icon-opt" onclick="setCenterIcon('❤️', this)">❤️</button>
                   <button type="button" class="icon-opt" onclick="setCenterIcon('G', this)"><b style="font-size:12px">G</b></button>
@@ -823,14 +822,15 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
             <div id="cardBadgeWrap" style="margin-bottom:8px">
               <span class="tag-badge" id="cardBadge">Table 01</span>
             </div>
-            <div class="card-emoji-header" id="cardEmoji">${client.emoji}</div>
+            <div class="card-emoji-header" id="cardEmoji">${logoHeaderHtml}</div>
             <div class="card-title" id="cardTitle">Enjoyed your visit?</div>
             <div class="stars-row">★★★★★</div>
             <div class="card-sub" id="cardSub">Scan to leave a Google review · Takes 30s ⭐</div>
 
             <!-- QR CODE BOX -->
             <div class="qr-box">
-              <canvas id="qrCanvas" class="qr-canvas-el" width="180" height="180"></canvas>
+              <img id="qrImg" src="${qrDataUrl}" class="qr-canvas-el" width="175" height="175" alt="QR Code" style="display:block">
+              <canvas id="qrCanvas" class="qr-canvas-el" width="180" height="180" style="display:none"></canvas>
             </div>
 
             <div class="card-footer">
@@ -852,58 +852,81 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
     <script>
       const RAW_URL = "${url}";
       let currentTheme = 'apple';
-      let currentCenterIcon = '${esc(client.emoji)}';
+      const isImgLogo = ${isImageLogo ? 'true' : 'false'};
+      const logoUrl = '${isImageLogo ? esc(client.emoji) : ''}';
+      let currentCenterIcon = isImgLogo ? 'logo' : '${esc(client.emoji)}';
+
+      const logoImgObj = new Image();
+      if (logoUrl) {
+        logoImgObj.src = logoUrl;
+        logoImgObj.onload = () => { if (currentCenterIcon === 'logo') renderQR(); };
+      }
 
       // ── RENDER QR CODE WITH CENTER BADGE ON CANVAS ──
       function renderQR() {
+        const img = document.getElementById('qrImg');
         const canvas = document.getElementById('qrCanvas');
-        if (!canvas) return;
+        if (!canvas || !img) return;
 
-        // Colors per theme
-        let darkColor = '#000000';
-        let lightColor = '#ffffff';
+        if (typeof QRCode !== 'undefined' && QRCode.toCanvas) {
+          let darkColor = '#000000';
+          let lightColor = '#ffffff';
 
-        if (currentTheme === 'm3dark') {
-          darkColor = '#f8fafc';
-          lightColor = '#121212';
-        } else if (currentTheme === 'glass') {
-          darkColor = '#0369a1';
-          lightColor = '#ffffff';
-        } else if (currentTheme === 'neumorphic') {
-          darkColor = '#1e293b';
-          lightColor = '#e0e5ec';
-        }
-
-        QRCode.toCanvas(canvas, RAW_URL, {
-          width: 360,
-          margin: 1,
-          errorCorrectionLevel: 'H',
-          color: { dark: darkColor, light: lightColor }
-        }, function(err) {
-          if (err) return console.error(err);
-          if (currentCenterIcon) {
-            const ctx = canvas.getContext('2d');
-            const size = canvas.width;
-            const center = size / 2;
-            const iconBgRadius = size * 0.14;
-
-            // Draw center circle backdrop
-            ctx.beginPath();
-            ctx.arc(center, center, iconBgRadius, 0, Math.PI * 2);
-            ctx.fillStyle = lightColor;
-            ctx.fill();
-            ctx.lineWidth = size * 0.015;
-            ctx.strokeStyle = darkColor;
-            ctx.stroke();
-
-            // Draw icon text / emoji
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.font = (size * 0.16) + 'px "DM Sans", -apple-system, sans-serif';
-            ctx.fillStyle = darkColor;
-            ctx.fillText(currentCenterIcon, center, center + (size * 0.01));
+          if (currentTheme === 'm3dark') {
+            darkColor = '#f8fafc';
+            lightColor = '#121212';
+          } else if (currentTheme === 'glass') {
+            darkColor = '#0369a1';
+            lightColor = '#ffffff';
+          } else if (currentTheme === 'neumorphic') {
+            darkColor = '#1e293b';
+            lightColor = '#e0e5ec';
           }
-        });
+
+          QRCode.toCanvas(canvas, RAW_URL, {
+            width: 360,
+            margin: 1,
+            errorCorrectionLevel: 'H',
+            color: { dark: darkColor, light: lightColor }
+          }, function(err) {
+            if (!err) {
+              canvas.style.display = 'block';
+              img.style.display = 'none';
+
+              if (currentCenterIcon) {
+                const ctx = canvas.getContext('2d');
+                const size = canvas.width;
+                const center = size / 2;
+                const iconBgRadius = size * 0.14;
+
+                ctx.beginPath();
+                ctx.arc(center, center, iconBgRadius, 0, Math.PI * 2);
+                ctx.fillStyle = lightColor;
+                ctx.fill();
+                ctx.lineWidth = size * 0.015;
+                ctx.strokeStyle = darkColor;
+                ctx.stroke();
+
+                if (currentCenterIcon === 'logo' && logoImgObj.complete && logoImgObj.naturalWidth) {
+                  const logoSize = iconBgRadius * 1.4;
+                  ctx.drawImage(logoImgObj, center - logoSize/2, center - logoSize/2, logoSize, logoSize);
+                } else if (currentCenterIcon && currentCenterIcon !== 'logo') {
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+                  ctx.font = (size * 0.15) + 'px "DM Sans", -apple-system, sans-serif';
+                  ctx.fillStyle = darkColor;
+                  ctx.fillText(currentCenterIcon, center, center + (size * 0.01));
+                }
+              }
+            } else {
+              canvas.style.display = 'none';
+              img.style.display = 'block';
+            }
+          });
+        } else {
+          canvas.style.display = 'none';
+          img.style.display = 'block';
+        }
       }
 
       // ── THEME SWITCHER ──
@@ -988,7 +1011,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       window.addEventListener('DOMContentLoaded', () => {
         renderQR();
       });
-      setTimeout(renderQR, 200);
+      setTimeout(renderQR, 150);
     </script>
   `, extraHead);
 }
