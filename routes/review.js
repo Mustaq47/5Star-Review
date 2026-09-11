@@ -248,41 +248,52 @@ ${isCoolSpicy ? `
 .root.light .re{color:rgba(14,116,144,0.6)}
 .root.dark  .re{color:rgba(186,230,253,0.45)}
 
-/* ── TEXTAREA ── */
-.tw{position:relative;margin-bottom:8px}
-.ta{
-  width:100%;border-radius:15px;font-family:'DM Sans',sans-serif;
-  font-size:14px;line-height:1.68;padding:14px;
-  resize:none;min-height:130px;outline:none;
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  transition:all .4s;border:1px solid;
+/* ── TEXTAREA & INLINE PREDICTION ── */
+.tw{
+  position:relative;margin-bottom:12px;border-radius:15px;
+  border:1px solid;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  transition:all .3s;overflow:hidden;
 }
-.root.light .ta{background:rgba(255,255,255,0.52);border-color:rgba(186,230,253,0.9);color:#0c2340;caret-color:#0284c7}
-.root.dark  .ta{background:rgba(7,18,36,0.55);border-color:rgba(56,189,248,0.18);color:#f0f9ff;caret-color:#38bdf8}
+.root.light .tw{background:rgba(255,255,255,0.52);border-color:rgba(186,230,253,0.9)}
+.root.dark  .tw{background:rgba(7,18,36,0.55);border-color:rgba(56,189,248,0.18)}
+.root.light .tw:focus-within{border-color:rgba(14,165,233,0.6);background:rgba(255,255,255,0.75)}
+.root.dark  .tw:focus-within{border-color:rgba(56,189,248,0.35);background:rgba(10,24,46,0.7)}
+
+.ta, .ta-mirror{
+  width:100%;font-family:'DM Sans',sans-serif;
+  font-size:14px;line-height:1.68;padding:14px;
+  box-sizing:border-box;margin:0;border:none;outline:none;
+  word-break:break-word;white-space:pre-wrap;
+  letter-spacing:normal;
+}
+.ta{
+  position:relative;z-index:2;background:transparent!important;
+  resize:none;min-height:130px;display:block;
+}
+.root.light .ta{color:#0c2340;caret-color:#0284c7}
+.root.dark  .ta{color:#f0f9ff;caret-color:#38bdf8}
 .root.light .ta::placeholder{color:rgba(14,116,144,0.45)}
 .root.dark  .ta::placeholder{color:rgba(186,230,253,0.38)}
-.root.light .ta:focus{border-color:rgba(14,165,233,0.6);background:rgba(255,255,255,0.75)}
-.root.dark  .ta:focus{border-color:rgba(56,189,248,0.35);background:rgba(10,24,46,0.7)}
 
-.ghost{
-  position:absolute;top:0;left:0;right:0;
-  padding:14px;font-family:'DM Sans',sans-serif;
-  font-size:14px;line-height:1.68;color:transparent;
-  pointer-events:none;white-space:pre-wrap;word-break:break-word;
+.ta-mirror{
+  position:absolute;top:0;left:0;right:0;bottom:0;
+  z-index:1;pointer-events:none;overflow:hidden;
+  color:transparent;user-select:none;
 }
-.root.light .gs{color:rgba(2,132,199,0.38)}
-.root.dark  .gs{color:rgba(56,189,248,0.32)}
+.ta-mirror .typed{visibility:hidden;color:transparent}
+.ta-mirror .sugg{visibility:visible;font-weight:400;opacity:0.55}
+.root.light .ta-mirror .sugg{color:#0284c7}
+.root.dark  .ta-mirror .sugg{color:#38bdf8}
 
-.th{
-  font-size:11.5px;font-family:'DM Mono',monospace;min-height:18px;margin-bottom:12px;
-  display:flex;align-items:center;gap:6px;cursor:pointer;
-  transition:color .3s;
+.tab-hint{
+  position:absolute;bottom:8px;right:10px;z-index:3;
+  font-family:'DM Sans',sans-serif;font-size:10.5px;font-weight:600;
+  border-radius:6px;padding:3px 8px;cursor:pointer;
+  transition:all .2s;display:none;align-items:center;gap:4px;
 }
-.root.light .th{color:#0284c7}
-.root.dark  .th{color:#38bdf8}
-.th-badge{
-  background:rgba(14,165,233,0.15);border-radius:4px;padding:1px 5px;font-size:10px;
-}
+.root.light .tab-hint{background:rgba(224,242,254,0.85);color:#0369a1;border:1px solid rgba(2,132,199,0.3)}
+.root.dark  .tab-hint{background:rgba(14,165,233,0.18);color:#bae6fd;border:1px solid rgba(56,189,248,0.3)}
+.tab-hint:hover{transform:scale(1.03)}
 
 /* ── SECTION LABEL ── */
 .sl{
@@ -429,13 +440,14 @@ ${isCoolSpicy ? `
         <div class="ps">Your review helps others decide.</div>
 
         <div class="tw">
-          <div class="ghost" id="ghost"></div>
+          <div class="ta-mirror" id="taMirror"></div>
           <textarea class="ta" id="ta" rows="5"
             placeholder="What stood out about your visit?"
-            oninput="onTA()" onkeydown="onKey(event)"></textarea>
+            oninput="onTA()" onscroll="syncScroll()" onkeydown="onKey(event)"></textarea>
+          <div class="tab-hint" id="tabHint" onclick="acceptSuggestion()">
+            <span>Tab ⇥</span>
+          </div>
         </div>
-
-        <div class="th" id="th" onclick="acceptSuggestion()"></div>
 
         <div class="sl">Quick tags</div>
         <div class="tags" id="tags"></div>
@@ -605,13 +617,38 @@ function regenerateReview() {
   triggerAgentGeneration();
 }
 
-let currentAlts = [];
+function syncScroll() {
+  const ta = document.getElementById('ta');
+  const mirror = document.getElementById('taMirror');
+  if (ta && mirror) mirror.scrollTop = ta.scrollTop;
+}
+
+function updateMirror() {
+  const ta = document.getElementById('ta');
+  const mirror = document.getElementById('taMirror');
+  const hint = document.getElementById('tabHint');
+  if (!ta || !mirror) return;
+  const v = ta.value;
+  if (sugg && v) {
+    const prefix = (!v.endsWith(' ') && !sugg.startsWith(' ')) ? ' ' : '';
+    mirror.innerHTML = '<span class="typed">' + esc(v) + '</span><span class="sugg">' + esc(prefix + sugg.trim()) + '</span>';
+    if (hint) hint.style.display = 'inline-flex';
+  } else {
+    mirror.innerHTML = '';
+    if (hint) hint.style.display = 'none';
+  }
+  mirror.scrollTop = ta.scrollTop;
+}
 
 function onTA() {
-  clrS();
   const ta = document.getElementById('ta');
   const v = ta.value;
-  if (!v || v.trim().length === 0) return;
+  syncScroll();
+  if (!v || v.trim().length === 0) {
+    clrS();
+    return;
+  }
+  clrS();
 
   clearTimeout(sgT);
   sgT = setTimeout(() => {
@@ -624,33 +661,23 @@ function onTA() {
     .then(data => {
       if (data.ok && data.suggestion) {
         const prim = typeof data.suggestion === 'string' ? data.suggestion : data.suggestion.primary;
-        const alts = (data.suggestion && data.suggestion.alternatives) ? data.suggestion.alternatives : [];
-        
-        sugg = prim || '';
-        currentAlts = alts;
-
-        if (sugg) {
-          document.getElementById('th').innerHTML =
-            '<span class="th-badge">AI Prediction</span> <span style="opacity:0.9">' + esc(sugg) + '</span> <span style="opacity:0.6;font-size:10px">(Tab or tap to complete)</span>';
-          document.getElementById('ghost').innerHTML =
-            esc(ta.value) + '<span class="gs">' + esc(sugg) + '</span>';
-        }
+        sugg = (prim || '').trim();
+        updateMirror();
       }
     })
     .catch(() => {});
   }, 100);
 }
 
-function acceptSuggestion(customText) {
-  const textToAppend = customText || sugg;
-  if (textToAppend) {
+function acceptSuggestion() {
+  if (sugg) {
     const ta = document.getElementById('ta');
-    const cleanAdd = textToAppend.trim();
-    const needsSpace = ta.value.length > 0 && !ta.value.endsWith(' ') && !textToAppend.startsWith(' ');
+    const cleanAdd = sugg.trim();
+    const needsSpace = ta.value.length > 0 && !ta.value.endsWith(' ') && !cleanAdd.startsWith(' ');
     ta.value += (needsSpace ? ' ' : '') + cleanAdd + ' ';
     clrS();
+    syncScroll();
     ta.focus();
-    onTA();
   }
 }
 
@@ -661,8 +688,11 @@ function onKey(e) {
   }
 }
 
-function clrS() { clearTimeout(sgT); clrG(); document.getElementById('th').textContent=''; }
-function clrG() { sugg=''; currentAlts=[]; document.getElementById('ghost').innerHTML=''; }
+function clrS() {
+  clearTimeout(sgT);
+  sugg = '';
+  updateMirror();
+}
 
 function buildPreview() {
   const txt = document.getElementById('ta').value.trim();
