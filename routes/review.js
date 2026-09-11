@@ -581,6 +581,19 @@ function toggleTag(label) {
     activeTags.add(label);
   }
   renderTags();
+
+  if (activeTags.size === 0) {
+    clearTimeout(genTimer);
+    const ta = document.getElementById('ta');
+    if (ta) {
+      ta.value = '';
+      ta.placeholder = 'Tap quick tags below or type your experience...';
+    }
+    clrS();
+    updateMirror();
+    return;
+  }
+
   triggerAgentGeneration();
 }
 
@@ -588,6 +601,16 @@ let genTimer = null;
 function triggerAgentGeneration() {
   clearTimeout(genTimer);
   const ta = document.getElementById('ta');
+  if (!ta) return;
+
+  if (activeTags.size === 0) {
+    ta.value = '';
+    ta.placeholder = 'Tap quick tags below or type your experience...';
+    clrS();
+    updateMirror();
+    return;
+  }
+
   ta.placeholder = 'RAGFlow AI is generating your unique review...';
 
   genTimer = setTimeout(() => {
@@ -605,6 +628,7 @@ function triggerAgentGeneration() {
       if (data.ok && data.review) {
         ta.value = data.review;
         clrS();
+        updateMirror();
         toast('✨ Generated unique review');
       }
     })
