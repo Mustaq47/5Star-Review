@@ -509,16 +509,20 @@ function clientFormPage(client, error) {
 function qrPage(client, qrDataUrl, url, qrSvg='') {
   const isImageLogo = client.emoji && (client.emoji.startsWith('/') || client.emoji.startsWith('http') || client.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i));
   const logoHeaderHtml = isImageLogo
-    ? `<img src="${esc(client.emoji)}" alt="${esc(client.business_name)}" style="width:76px;height:76px;object-fit:contain;border-radius:18px;display:block">`
-    : `<span style="font-size:44px;line-height:1;display:block">${esc(client.emoji || '🏪')}</span>`;
+    ? `<img src="${esc(client.emoji)}" alt="${esc(client.business_name)}" style="width:72px;height:72px;object-fit:contain;border-radius:18px;display:block">`
+    : `<span style="font-size:42px;line-height:1;display:block">${esc(client.emoji || '🏪')}</span>`;
+
+  const logoCenterHtml = isImageLogo
+    ? `<img src="${esc(client.emoji)}" alt="Logo" style="width:26px;height:26px;object-fit:contain;border-radius:6px;display:block">`
+    : `<span style="font-size:20px;line-height:1">${esc(client.emoji || '🏪')}</span>`;
 
   const extraHead = `
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <style>
       /* ── THEME PALETTES & TOKENS ── */
       :root {
         --ease-spring: cubic-bezier(0.4, 0, 0.2, 1);
+        --apple-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
       }
 
       .btn:active, .theme-chip:active, .icon-opt:active {
@@ -546,54 +550,83 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
         color: var(--t3); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
       }
 
-      /* ── STANDEE PREVIEW CONTAINER (NO BACKGROUND LIGHT) ── */
+      /* ── STANDEE PREVIEW CONTAINER (MATTE OBSIDIAN, ZERO GLARE) ── */
       .preview-stage {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        background: #090910;
-        border: 1px solid var(--b1); border-radius: 28px; padding: 36px 16px;
-        min-height: 560px; position: relative; overflow: hidden;
+        background: #08080c;
+        border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 28px; padding: 36px 16px;
+        min-height: 580px; position: relative; overflow: hidden;
       }
 
-      /* ── STANDEE CARD CORE ── */
+      /* ── STANDEE CARD CORE (GENUINE APPLE INDUSTRIAL DESIGN) ── */
       #standeeCard {
-        width: 100%; max-width: 360px; border-radius: 28px; padding: 32px 22px 24px;
+        width: 100%; max-width: 380px; border-radius: 34px; padding: 34px 24px 26px;
         text-align: center; position: relative; z-index: 2;
-        box-shadow: 0 20px 48px rgba(0,0,0,0.4);
+        box-shadow: 0 24px 48px -12px rgba(0,0,0,0.5);
         transition: all 0.25s var(--ease-spring);
-        font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: var(--apple-font);
+        box-sizing: border-box;
       }
 
       /* LOGO EMBLEM DISK */
       .logo-disk {
         display: inline-flex; align-items: center; justify-content: center;
-        width: 82px; height: 82px; border-radius: 22px; margin: 0 auto 14px;
+        width: 80px; height: 80px; border-radius: 22px; margin: 0 auto 16px;
         padding: 4px; position: relative;
         transition: all 0.2s var(--ease-spring);
       }
 
-      /* THEME: Apple Minimalist Glass */
+      /* THEME: Apple Minimalist Glass & Ceramic */
       #standeeCard.theme-apple {
         background: #ffffff;
-        border: 1px solid rgba(228, 228, 231, 0.9);
-        color: #09090b;
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        color: #1d1d1f;
+        box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.12), 0 0 1px 1px rgba(0, 0, 0, 0.04);
       }
-      #standeeCard.theme-apple .logo-disk { background: #ffffff; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.06); }
-      #standeeCard.theme-apple .card-title { color: #000; letter-spacing: -0.025em; }
-      #standeeCard.theme-apple .card-sub { color: #52525b; }
-      #standeeCard.theme-apple .qr-box { background: #ffffff; box-shadow: 0 6px 20px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.06); }
-      #standeeCard.theme-apple .scan-hint { background: #f4f4f5; color: #3f3f46; }
-      #standeeCard.theme-apple .card-footer { color: #71717a; }
+      #standeeCard.theme-apple .logo-disk {
+        background: #fbfbfd;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+        border: 1px solid rgba(0,0,0,0.06);
+      }
+      #standeeCard.theme-apple .card-title {
+        color: #1d1d1f;
+        font-weight: 700;
+        letter-spacing: -0.035em;
+        font-size: 23px;
+      }
+      #standeeCard.theme-apple .card-sub {
+        color: #6e6e73;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+      }
+      #standeeCard.theme-apple .qr-box {
+        background: #ffffff;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+        border: 1px solid rgba(0,0,0,0.07);
+      }
+      #standeeCard.theme-apple .qr-center-badge {
+        background: #ffffff;
+        border-color: #ffffff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      }
+      #standeeCard.theme-apple .scan-hint {
+        background: rgba(0,0,0,0.05);
+        color: #1d1d1f;
+      }
+      #standeeCard.theme-apple .card-footer {
+        color: #86868b;
+      }
 
       /* THEME: M3 Dark */
       #standeeCard.theme-m3dark {
-        background: #18181c; border: 1px solid #2d2d34; color: #f8fafc;
+        background: #16161a; border: 1px solid #2d2d34; color: #f8fafc;
         box-shadow: 0 20px 48px rgba(0,0,0,0.6);
       }
-      #standeeCard.theme-m3dark .logo-disk { background: #23232a; border: 1px solid #33333d; }
+      #standeeCard.theme-m3dark .logo-disk { background: #22222a; border: 1px solid #33333d; }
       #standeeCard.theme-m3dark .card-title { color: #f8fafc; letter-spacing: -0.02em; }
       #standeeCard.theme-m3dark .card-sub { color: #94a3b8; }
-      #standeeCard.theme-m3dark .qr-box { background: #121215; border: 1px solid #2d2d34; }
+      #standeeCard.theme-m3dark .qr-box { background: #ffffff; border: 1px solid #2d2d34; }
+      #standeeCard.theme-m3dark .qr-center-badge { background: #ffffff; border-color: #ffffff; color: #111; }
       #standeeCard.theme-m3dark .scan-hint { background: #23232a; color: #94a3b8; }
       #standeeCard.theme-m3dark .card-footer { color: #64748b; }
 
@@ -606,6 +639,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       #standeeCard.theme-m3light .card-title { color: #0f172a; }
       #standeeCard.theme-m3light .card-sub { color: #64748b; }
       #standeeCard.theme-m3light .qr-box { background: #f8fafc; border: 1px solid #e2e8f0; }
+      #standeeCard.theme-m3light .qr-center-badge { background: #ffffff; border-color: #ffffff; }
       #standeeCard.theme-m3light .scan-hint { background: #f1f5f9; color: #475569; }
       #standeeCard.theme-m3light .card-footer { color: #94a3b8; }
 
@@ -619,6 +653,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       #standeeCard.theme-glass .card-title { color: #ffffff; }
       #standeeCard.theme-glass .card-sub { color: #e0f2fe; }
       #standeeCard.theme-glass .qr-box { background: #ffffff; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+      #standeeCard.theme-glass .qr-center-badge { background: #ffffff; border-color: #ffffff; }
       #standeeCard.theme-glass .scan-hint { background: rgba(255,255,255,0.22); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); }
       #standeeCard.theme-glass .card-footer { color: #e0f2fe; }
 
@@ -636,8 +671,9 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       #standeeCard.theme-neumorphic .qr-box {
         background: #e0e5ec;
         box-shadow: inset 4px 4px 8px #b8b9be, inset -4px -4px 8px #ffffff;
-        padding: 12px; border-radius: 20px;
+        padding: 14px; border-radius: 22px;
       }
+      #standeeCard.theme-neumorphic .qr-center-badge { background: #e0e5ec; box-shadow: 2px 2px 5px #b8b9be; border-color: #e0e5ec; }
       #standeeCard.theme-neumorphic .scan-hint {
         background: #e0e5ec; color: #475569;
         box-shadow: 3px 3px 6px #b8b9be, -3px -3px 6px #ffffff;
@@ -647,12 +683,13 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       /* THEME: Minimalist Pure */
       #standeeCard.theme-minimalist {
         background: #ffffff; border: 2px solid #000; color: #000;
-        border-radius: 20px; box-shadow: 6px 6px 0px #000;
+        border-radius: 22px; box-shadow: 6px 6px 0px #000;
       }
       #standeeCard.theme-minimalist .logo-disk { background: #fff; border: 2px solid #000; }
       #standeeCard.theme-minimalist .card-title { color: #000; font-weight: 800; }
       #standeeCard.theme-minimalist .card-sub { color: #3f3f46; font-weight: 500; }
-      #standeeCard.theme-minimalist .qr-box { background: #fff; border: 2px solid #000; border-radius: 14px; }
+      #standeeCard.theme-minimalist .qr-box { background: #fff; border: 2px solid #000; border-radius: 16px; }
+      #standeeCard.theme-minimalist .qr-center-badge { background: #ffffff; border: 2px solid #000; }
       #standeeCard.theme-minimalist .scan-hint { background: #f4f4f5; color: #000; border: 1px solid #000; }
       #standeeCard.theme-minimalist .card-footer { color: #000; font-weight: 700; }
 
@@ -666,32 +703,53 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       #standeeCard.theme-gradient .card-title { color: #ffffff; }
       #standeeCard.theme-gradient .card-sub { color: #fdf2f8; opacity: 0.95; }
       #standeeCard.theme-gradient .qr-box { background: #ffffff; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+      #standeeCard.theme-gradient .qr-center-badge { background: #ffffff; border-color: #ffffff; }
       #standeeCard.theme-gradient .scan-hint { background: rgba(255,255,255,0.2); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); }
       #standeeCard.theme-gradient .card-footer { color: #fdf2f8; opacity: 0.9; }
 
-      /* QR Canvas wrapper */
+      /* QR Box with Instant Floating Center Badge */
       .qr-box {
-        display: inline-block; padding: 12px; border-radius: 20px;
+        display: inline-block; padding: 14px; border-radius: 22px;
         margin: 14px 0 12px; position: relative; transition: all 0.2s var(--ease-spring);
       }
-      .qr-canvas-el { display: block; border-radius: 12px; max-width: 175px; height: auto; margin: 0 auto; }
+      .qr-canvas-el { display: block; border-radius: 12px; width: 175px; height: 175px; margin: 0 auto; }
+      
+      .qr-center-badge {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: #ffffff;
+        border: 2.5px solid #ffffff;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        z-index: 10;
+        transition: all 0.2s var(--ease-spring);
+      }
 
-      .card-title { font-size: 21px; font-weight: 700; line-height: 1.2; margin-bottom: 4px; }
+      .card-title { font-size: 22px; font-weight: 700; line-height: 1.2; margin-bottom: 4px; }
       .card-sub {
         font-size: 13px; line-height: 1.4; font-weight: 500;
         white-space: nowrap; width: 100%; margin: 0 auto 8px;
+        letter-spacing: -0.01em;
       }
       .stars-row {
-        color: #f59e0b; font-size: 17px; margin: 4px 0 6px; letter-spacing: 3px;
-        filter: drop-shadow(0 2px 6px rgba(245,158,11,0.4));
+        color: #f59e0b; font-size: 18px; margin: 4px 0 6px; letter-spacing: 3.5px;
+        filter: drop-shadow(0 2px 6px rgba(245,158,11,0.35));
       }
       .scan-hint {
-        display: inline-flex; align-items: center; gap: 5px;
-        font-size: 11.5px; font-weight: 600; padding: 5px 12px; border-radius: 14px;
-        margin: 0 auto 12px;
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 11.5px; font-weight: 600; padding: 6px 14px; border-radius: 20px;
+        margin: 2px auto 14px; letter-spacing: -0.01em;
       }
       .card-footer {
-        margin-top: 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
+        margin-top: 4px; font-size: 12px; font-weight: 600; letter-spacing: -0.01em;
         display: flex; align-items: center; justify-content: center; gap: 6px;
       }
 
@@ -789,13 +847,13 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
             <div class="form-group">
               <label class="form-label">Center QR Icon</label>
               <div class="icon-grid">
-                <button type="button" class="icon-opt active" onclick="setCenterIcon('${isImageLogo ? 'logo' : esc(client.emoji)}', this)" title="Store Brand Logo">
+                <button type="button" class="icon-opt active" onclick="setCenterIcon('logo', this)" title="Store Brand Logo">
                   ${isImageLogo ? `<img src="${esc(client.emoji)}" style="width:20px;height:20px;object-fit:contain;vertical-align:middle">` : (client.emoji||'🏪')}
                 </button>
-                <button type="button" class="icon-opt" onclick="setCenterIcon('⭐', this)" title="Gold Star">⭐</button>
-                <button type="button" class="icon-opt" onclick="setCenterIcon('❤️', this)" title="Heart">❤️</button>
-                <button type="button" class="icon-opt" onclick="setCenterIcon('G', this)" title="Google G"><b style="font-size:12px">G</b></button>
-                <button type="button" class="icon-opt" onclick="setCenterIcon('', this)" title="Clean QR without icon"><i class="ti ti-ban" style="font-size:14px"></i></button>
+                <button type="button" class="icon-opt" onclick="setCenterIcon('star', this)" title="Gold Star">⭐</button>
+                <button type="button" class="icon-opt" onclick="setCenterIcon('heart', this)" title="Heart">❤️</button>
+                <button type="button" class="icon-opt" onclick="setCenterIcon('google', this)" title="Google G"><b style="font-size:13px;color:#4285F4">G</b></button>
+                <button type="button" class="icon-opt" onclick="setCenterIcon('none', this)" title="Clean QR without icon"><i class="ti ti-ban" style="font-size:14px"></i></button>
               </div>
             </div>
           </div>
@@ -844,10 +902,12 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
             <div class="stars-row">★★★★★</div>
             <div class="card-sub" id="cardSub">Scan to leave a Google review · Takes 30s ⭐</div>
 
-            <!-- QR CODE BOX -->
+            <!-- QR CODE BOX WITH DIRECT FLOATING OVERLAY BADGE -->
             <div class="qr-box">
-              <img id="qrImg" src="${qrDataUrl}" class="qr-canvas-el" width="175" height="175" alt="QR Code" style="display:block">
-              <canvas id="qrCanvas" class="qr-canvas-el" width="180" height="180" style="display:none"></canvas>
+              <img id="qrImg" src="${qrDataUrl}" class="qr-canvas-el" width="175" height="175" alt="QR Code">
+              <div class="qr-center-badge" id="qrCenterBadge">
+                ${logoCenterHtml}
+              </div>
             </div>
 
             <div class="scan-hint">
@@ -873,82 +933,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
     <script>
       const RAW_URL = "${url}";
       let currentTheme = 'apple';
-      const isImgLogo = ${isImageLogo ? 'true' : 'false'};
-      const logoUrl = '${isImageLogo ? esc(client.emoji) : ''}';
-      let currentCenterIcon = isImgLogo ? 'logo' : '${esc(client.emoji)}';
-
-      const logoImgObj = new Image();
-      if (logoUrl) {
-        logoImgObj.src = logoUrl;
-        logoImgObj.onload = () => { if (currentCenterIcon === 'logo') renderQR(); };
-      }
-
-      // ── RENDER QR CODE WITH CENTER BADGE ON CANVAS ──
-      function renderQR() {
-        const img = document.getElementById('qrImg');
-        const canvas = document.getElementById('qrCanvas');
-        if (!canvas || !img) return;
-
-        if (typeof QRCode !== 'undefined' && QRCode.toCanvas) {
-          let darkColor = '#000000';
-          let lightColor = '#ffffff';
-
-          if (currentTheme === 'm3dark') {
-            darkColor = '#f8fafc';
-            lightColor = '#121215';
-          } else if (currentTheme === 'glass') {
-            darkColor = '#0369a1';
-            lightColor = '#ffffff';
-          } else if (currentTheme === 'neumorphic') {
-            darkColor = '#1e293b';
-            lightColor = '#e0e5ec';
-          }
-
-          QRCode.toCanvas(canvas, RAW_URL, {
-            width: 360,
-            margin: 1,
-            errorCorrectionLevel: 'H',
-            color: { dark: darkColor, light: lightColor }
-          }, function(err) {
-            if (!err) {
-              canvas.style.display = 'block';
-              img.style.display = 'none';
-
-              if (currentCenterIcon) {
-                const ctx = canvas.getContext('2d');
-                const size = canvas.width;
-                const center = size / 2;
-                const iconBgRadius = size * 0.14;
-
-                ctx.beginPath();
-                ctx.arc(center, center, iconBgRadius, 0, Math.PI * 2);
-                ctx.fillStyle = lightColor;
-                ctx.fill();
-                ctx.lineWidth = size * 0.015;
-                ctx.strokeStyle = darkColor;
-                ctx.stroke();
-
-                if (currentCenterIcon === 'logo' && logoImgObj.complete && logoImgObj.naturalWidth) {
-                  const logoSize = iconBgRadius * 1.4;
-                  ctx.drawImage(logoImgObj, center - logoSize/2, center - logoSize/2, logoSize, logoSize);
-                } else if (currentCenterIcon && currentCenterIcon !== 'logo') {
-                  ctx.textAlign = 'center';
-                  ctx.textBaseline = 'middle';
-                  ctx.font = (size * 0.15) + 'px "DM Sans", -apple-system, sans-serif';
-                  ctx.fillStyle = darkColor;
-                  ctx.fillText(currentCenterIcon, center, center + (size * 0.01));
-                }
-              }
-            } else {
-              canvas.style.display = 'none';
-              img.style.display = 'block';
-            }
-          });
-        } else {
-          canvas.style.display = 'none';
-          img.style.display = 'block';
-        }
-      }
+      const logoHtml = \`${logoCenterHtml}\`;
 
       // ── THEME SWITCHER ──
       function setTheme(themeName, el) {
@@ -958,16 +943,31 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
 
         const card = document.getElementById('standeeCard');
         card.className = 'theme-' + themeName;
-
-        renderQR();
       }
 
-      // ── CENTER ICON SWITCHER ──
-      function setCenterIcon(icon, el) {
-        currentCenterIcon = icon;
+      // ── CENTER ICON SWITCHER (INSTANT DOM UPDATE) ──
+      function setCenterIcon(type, el) {
         document.querySelectorAll('.icon-opt').forEach(b => b.classList.remove('active'));
         if (el) el.classList.add('active');
-        renderQR();
+
+        const badge = document.getElementById('qrCenterBadge');
+        if (!badge) return;
+
+        if (type === 'none') {
+          badge.style.display = 'none';
+          badge.innerHTML = '';
+        } else {
+          badge.style.display = 'flex';
+          if (type === 'logo') {
+            badge.innerHTML = logoHtml;
+          } else if (type === 'star') {
+            badge.innerHTML = '<span style="font-size:20px;line-height:1">⭐</span>';
+          } else if (type === 'heart') {
+            badge.innerHTML = '<span style="font-size:20px;line-height:1">❤️</span>';
+          } else if (type === 'google') {
+            badge.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>';
+          }
+        }
       }
 
       // ── TEXT UPDATES ──
@@ -1017,12 +1017,6 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
           setTimeout(() => { btn.innerHTML = '<i class="ti ti-copy"></i> Copy Link'; }, 2000);
         });
       }
-
-      // Initial render on load
-      window.addEventListener('DOMContentLoaded', () => {
-        renderQR();
-      });
-      setTimeout(renderQR, 150);
     </script>
   `, extraHead);
 }
