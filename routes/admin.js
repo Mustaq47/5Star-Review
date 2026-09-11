@@ -546,69 +546,50 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
         color: var(--t3); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
       }
 
-      /* ── STANDEE PREVIEW CONTAINER ── */
+      /* ── STANDEE PREVIEW CONTAINER (NO BACKGROUND LIGHT) ── */
       .preview-stage {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        background: radial-gradient(circle at 50% 20%, #171728 0%, #0a0a14 100%);
-        border: 1px solid var(--b1); border-radius: 28px; padding: 40px 20px;
-        min-height: 600px; position: relative; overflow: hidden;
-      }
-      .preview-backdrop-grid {
-        position: absolute; inset: 0;
-        background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-                          linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-        background-size: 24px 24px; pointer-events: none;
+        background: #090910;
+        border: 1px solid var(--b1); border-radius: 28px; padding: 36px 16px;
+        min-height: 560px; position: relative; overflow: hidden;
       }
 
       /* ── STANDEE CARD CORE ── */
       #standeeCard {
-        width: 100%; max-width: 324px; border-radius: 32px; padding: 28px 24px 24px;
+        width: 100%; max-width: 360px; border-radius: 28px; padding: 32px 22px 24px;
         text-align: center; position: relative; z-index: 2;
-        box-shadow: 0 30px 70px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.2);
-        transition: all 0.3s var(--ease-spring);
+        box-shadow: 0 20px 48px rgba(0,0,0,0.4);
+        transition: all 0.25s var(--ease-spring);
         font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       }
-
-      /* GOOGLE PILL */
-      .g-badge {
-        display: inline-flex; align-items: center; gap: 6px;
-        font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
-        padding: 5px 13px; border-radius: 20px; margin-bottom: 16px;
-        transition: all 0.2s var(--ease-spring);
-      }
-      .g-icon { width: 14px; height: 14px; flex-shrink: 0; }
 
       /* LOGO EMBLEM DISK */
       .logo-disk {
         display: inline-flex; align-items: center; justify-content: center;
-        width: 86px; height: 86px; border-radius: 22px; margin: 0 auto 12px;
-        padding: 5px; position: relative;
+        width: 82px; height: 82px; border-radius: 22px; margin: 0 auto 14px;
+        padding: 4px; position: relative;
         transition: all 0.2s var(--ease-spring);
       }
 
       /* THEME: Apple Minimalist Glass */
       #standeeCard.theme-apple {
-        background: rgba(255, 255, 255, 0.94);
-        backdrop-filter: blur(32px) saturate(200%);
-        -webkit-backdrop-filter: blur(32px) saturate(200%);
-        border: 1px solid rgba(255, 255, 255, 0.98);
+        background: #ffffff;
+        border: 1px solid rgba(228, 228, 231, 0.9);
         color: #09090b;
-        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255,255,255,1);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
       }
-      #standeeCard.theme-apple .g-badge { background: #f4f4f5; color: #18181b; border: 1px solid #e4e4e7; }
-      #standeeCard.theme-apple .logo-disk { background: #ffffff; box-shadow: 0 6px 20px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.06); }
+      #standeeCard.theme-apple .logo-disk { background: #ffffff; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.06); }
       #standeeCard.theme-apple .card-title { color: #000; letter-spacing: -0.025em; }
       #standeeCard.theme-apple .card-sub { color: #52525b; }
-      #standeeCard.theme-apple .qr-box { background: #ffffff; box-shadow: 0 8px 24px rgba(0,0,0,0.07); border: 1px solid rgba(0,0,0,0.06); }
+      #standeeCard.theme-apple .qr-box { background: #ffffff; box-shadow: 0 6px 20px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.06); }
       #standeeCard.theme-apple .scan-hint { background: #f4f4f5; color: #3f3f46; }
       #standeeCard.theme-apple .card-footer { color: #71717a; }
 
       /* THEME: M3 Dark */
       #standeeCard.theme-m3dark {
-        background: #19191d; border: 1px solid #2d2d34; color: #f8fafc;
-        box-shadow: 0 28px 60px rgba(0,0,0,0.7);
+        background: #18181c; border: 1px solid #2d2d34; color: #f8fafc;
+        box-shadow: 0 20px 48px rgba(0,0,0,0.6);
       }
-      #standeeCard.theme-m3dark .g-badge { background: #14532d; color: #4ade80; border: 1px solid rgba(74,222,128,0.25); }
       #standeeCard.theme-m3dark .logo-disk { background: #23232a; border: 1px solid #33333d; }
       #standeeCard.theme-m3dark .card-title { color: #f8fafc; letter-spacing: -0.02em; }
       #standeeCard.theme-m3dark .card-sub { color: #94a3b8; }
@@ -619,9 +600,8 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       /* THEME: M3 Light */
       #standeeCard.theme-m3light {
         background: #ffffff; border: 1px solid #e2e8f0; color: #0f172a;
-        box-shadow: 0 20px 48px rgba(0,0,0,0.08);
+        box-shadow: 0 16px 40px rgba(0,0,0,0.08);
       }
-      #standeeCard.theme-m3light .g-badge { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
       #standeeCard.theme-m3light .logo-disk { background: #f8fafc; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
       #standeeCard.theme-m3light .card-title { color: #0f172a; }
       #standeeCard.theme-m3light .card-sub { color: #64748b; }
@@ -631,27 +611,21 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
 
       /* THEME: Glassmorphism Ocean */
       #standeeCard.theme-glass {
-        background: linear-gradient(135deg, rgba(2, 132, 199, 0.55) 0%, rgba(14, 165, 233, 0.65) 100%);
-        backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
-        border: 1px solid rgba(255, 255, 255, 0.4); color: #ffffff;
-        box-shadow: 0 24px 60px rgba(2, 132, 199, 0.4);
+        background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);
+        border: 1px solid rgba(255, 255, 255, 0.35); color: #ffffff;
+        box-shadow: 0 20px 48px rgba(2, 132, 199, 0.35);
       }
-      #standeeCard.theme-glass .g-badge { background: rgba(255,255,255,0.25); color: #fff; border: 1px solid rgba(255,255,255,0.4); }
       #standeeCard.theme-glass .logo-disk { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.35); }
-      #standeeCard.theme-glass .card-title { color: #ffffff; text-shadow: 0 2px 10px rgba(0,0,0,0.15); }
+      #standeeCard.theme-glass .card-title { color: #ffffff; }
       #standeeCard.theme-glass .card-sub { color: #e0f2fe; }
-      #standeeCard.theme-glass .qr-box { background: #ffffff; box-shadow: 0 10px 32px rgba(0,0,0,0.18); }
-      #standeeCard.theme-glass .scan-hint { background: rgba(255,255,255,0.2); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); }
+      #standeeCard.theme-glass .qr-box { background: #ffffff; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+      #standeeCard.theme-glass .scan-hint { background: rgba(255,255,255,0.22); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); }
       #standeeCard.theme-glass .card-footer { color: #e0f2fe; }
 
       /* THEME: Neumorphic Soft */
       #standeeCard.theme-neumorphic {
         background: #e0e5ec; border: none; color: #334155;
-        box-shadow: 18px 18px 40px #b8b9be, -18px -18px 40px #ffffff;
-      }
-      #standeeCard.theme-neumorphic .g-badge {
-        background: #e0e5ec; color: #16a34a;
-        box-shadow: 3px 3px 6px #b8b9be, -3px -3px 6px #ffffff;
+        box-shadow: 16px 16px 36px #b8b9be, -16px -16px 36px #ffffff;
       }
       #standeeCard.theme-neumorphic .logo-disk {
         background: #e0e5ec;
@@ -661,7 +635,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       #standeeCard.theme-neumorphic .card-sub { color: #64748b; }
       #standeeCard.theme-neumorphic .qr-box {
         background: #e0e5ec;
-        box-shadow: inset 5px 5px 10px #b8b9be, inset -5px -5px 10px #ffffff;
+        box-shadow: inset 4px 4px 8px #b8b9be, inset -4px -4px 8px #ffffff;
         padding: 12px; border-radius: 20px;
       }
       #standeeCard.theme-neumorphic .scan-hint {
@@ -673,9 +647,8 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       /* THEME: Minimalist Pure */
       #standeeCard.theme-minimalist {
         background: #ffffff; border: 2px solid #000; color: #000;
-        border-radius: 20px; box-shadow: 8px 8px 0px #000;
+        border-radius: 20px; box-shadow: 6px 6px 0px #000;
       }
-      #standeeCard.theme-minimalist .g-badge { background: #000; color: #fff; }
       #standeeCard.theme-minimalist .logo-disk { background: #fff; border: 2px solid #000; }
       #standeeCard.theme-minimalist .card-title { color: #000; font-weight: 800; }
       #standeeCard.theme-minimalist .card-sub { color: #3f3f46; font-weight: 500; }
@@ -687,36 +660,38 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       #standeeCard.theme-gradient {
         background: linear-gradient(145deg, #4338ca 0%, #7c3aed 50%, #db2777 100%);
         border: 1px solid rgba(255,255,255,0.3); color: #ffffff;
-        box-shadow: 0 24px 60px rgba(124, 58, 237, 0.45);
+        box-shadow: 0 20px 48px rgba(124, 58, 237, 0.4);
       }
-      #standeeCard.theme-gradient .g-badge { background: rgba(255,255,255,0.25); color: #fff; border: 1px solid rgba(255,255,255,0.4); }
       #standeeCard.theme-gradient .logo-disk { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.35); }
       #standeeCard.theme-gradient .card-title { color: #ffffff; }
       #standeeCard.theme-gradient .card-sub { color: #fdf2f8; opacity: 0.95; }
-      #standeeCard.theme-gradient .qr-box { background: #ffffff; box-shadow: 0 10px 32px rgba(0,0,0,0.22); }
+      #standeeCard.theme-gradient .qr-box { background: #ffffff; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
       #standeeCard.theme-gradient .scan-hint { background: rgba(255,255,255,0.2); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); }
       #standeeCard.theme-gradient .card-footer { color: #fdf2f8; opacity: 0.9; }
 
       /* QR Canvas wrapper */
       .qr-box {
-        display: inline-block; padding: 12px; border-radius: 22px;
+        display: inline-block; padding: 12px; border-radius: 20px;
         margin: 14px 0 12px; position: relative; transition: all 0.2s var(--ease-spring);
       }
       .qr-canvas-el { display: block; border-radius: 12px; max-width: 175px; height: auto; margin: 0 auto; }
 
-      .card-title { font-size: 20.5px; font-weight: 700; line-height: 1.22; margin-bottom: 5px; }
-      .card-sub { font-size: 12.5px; line-height: 1.45; max-width: 250px; margin: 0 auto 6px; }
+      .card-title { font-size: 21px; font-weight: 700; line-height: 1.2; margin-bottom: 4px; }
+      .card-sub {
+        font-size: 13px; line-height: 1.4; font-weight: 500;
+        white-space: nowrap; width: 100%; margin: 0 auto 8px;
+      }
       .stars-row {
-        color: #f59e0b; font-size: 16px; margin: 5px 0 6px; letter-spacing: 3px;
-        filter: drop-shadow(0 2px 8px rgba(245,158,11,0.45));
+        color: #f59e0b; font-size: 17px; margin: 4px 0 6px; letter-spacing: 3px;
+        filter: drop-shadow(0 2px 6px rgba(245,158,11,0.4));
       }
       .scan-hint {
         display: inline-flex; align-items: center; gap: 5px;
-        font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px;
-        margin: 0 auto 10px;
+        font-size: 11.5px; font-weight: 600; padding: 5px 12px; border-radius: 14px;
+        margin: 0 auto 12px;
       }
       .card-footer {
-        margin-top: 6px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
+        margin-top: 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
         display: flex; align-items: center; justify-content: center; gap: 6px;
       }
 
@@ -732,7 +707,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       /* Print guidelines */
       @media print {
         body { background: #fff !important; color: #000 !important; }
-        .topbar, .page-hdr, .ctrl-col, .no-print, .preview-backdrop-grid { display: none !important; }
+        .topbar, .page-hdr, .ctrl-col, .no-print { display: none !important; }
         .page { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
         .preview-stage {
           background: #fff !important; border: none !important; padding: 0 !important;
@@ -770,7 +745,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
             <div class="theme-chip active" onclick="setTheme('apple', this)">
               <span class="theme-dot" style="background:#000;border:1px solid #fff"></span>
-              <span>🍏 Apple Glass</span>
+              <span>🍏 Apple Clean</span>
             </div>
             <div class="theme-chip" onclick="setTheme('m3dark', this)">
               <span class="theme-dot" style="background:#4ade80"></span>
@@ -855,22 +830,10 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       <!-- ── RIGHT: LIVE 1:1 PREVIEW STAGE ── -->
       <div style="position:sticky;top:76px">
         <div class="preview-stage">
-          <div class="preview-backdrop-grid"></div>
 
           <!-- STANDEE CARD COMPONENT -->
           <div id="standeeCard" class="theme-apple">
             
-            <!-- GOOGLE BADGE -->
-            <div class="g-badge">
-              <svg class="g-icon" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
-                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"/>
-                <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.97 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
-                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
-              </svg>
-              <span>Review us on Google</span>
-            </div>
-
             <!-- BRAND LOGO DISK -->
             <div class="logo-disk" id="cardEmoji">
               ${logoHeaderHtml}
