@@ -26,8 +26,12 @@ app.get('/', (req, res) => res.redirect('/admin'));
 app.use('/admin', adminRoutes);
 app.use('/r', reviewRoutes);
 
-app.listen(PORT, () => {
-  console.log('\n✅ ReviewPro running at http://localhost:' + PORT);
-  console.log('   Admin:  http://localhost:' + PORT + '/admin');
-  console.log('   Login:  admin@reviewpro.in / admin123\n');
-});
+if (require.main === module || !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log('\n✅ ReviewPro running at http://localhost:' + PORT);
+    console.log('   Admin:  http://localhost:' + PORT + '/admin');
+    console.log('   Login:  admin@reviewpro.in / admin123\n');
+  });
+}
+
+module.exports = app;
