@@ -181,7 +181,8 @@ button{font-family:'DM Sans',sans-serif}
 
 /* ── BIZ CELL ── */
 .biz-cell{display:flex;align-items:center;gap:12px}
-.biz-icon{width:40px;height:40px;border-radius:11px;background:var(--s3);border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0}
+.biz-icon{width:40px;height:40px;border-radius:11px;background:var(--s3);border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;overflow:hidden;padding:2px}
+.biz-icon img{width:100%;height:100%;object-fit:contain;border-radius:8px;display:block}
 .biz-name{font-weight:600;color:var(--t1);font-size:14px;margin-bottom:2px}
 .biz-slug{font-size:11px;color:var(--t3);font-family:'DM Mono',monospace}
 
@@ -327,7 +328,7 @@ function dashboardPage(clients) {
         return `<tr>
           <td>
             <div class="biz-cell">
-              <div class="biz-icon">${c.emoji}</div>
+              <div class="biz-icon">${c.emoji && (c.emoji.startsWith('/') || c.emoji.startsWith('http') || c.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i)) ? `<img src="${esc(c.emoji)}" alt="${esc(c.business_name)}">` : esc(c.emoji||'🏪')}</div>
               <div>
                 <div class="biz-name">${esc(c.business_name)}</div>
                 <div class="biz-slug">/r/${c.slug}</div>
@@ -1033,7 +1034,7 @@ function analyticsPage(client, stats) {
     <div class="page-hdr">
       <div>
         <div class="page-title">Analytics — ${esc(client.business_name)}</div>
-        <div class="page-sub">Last 30 days · ${client.emoji} /r/${client.slug}</div>
+        <div class="page-sub" style="display:flex;align-items:center;gap:6px">Last 30 days · ${client.emoji && (client.emoji.startsWith('/') || client.emoji.startsWith('http') || client.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i)) ? `<img src="${esc(client.emoji)}" style="width:16px;height:16px;object-fit:contain;border-radius:4px;display:inline-block">` : esc(client.emoji||'🏪')} /r/${client.slug}</div>
       </div>
       <a href="/admin" class="btn btn-ghost"><i class="ti ti-arrow-left"></i> Back</a>
     </div>
