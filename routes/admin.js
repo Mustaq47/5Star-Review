@@ -509,8 +509,8 @@ function clientFormPage(client, error) {
 function qrPage(client, qrDataUrl, url, qrSvg='') {
   const isImageLogo = client.emoji && (client.emoji.startsWith('/') || client.emoji.startsWith('http') || client.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i));
   const logoHeaderHtml = isImageLogo
-    ? `<img src="${esc(client.emoji)}" alt="${esc(client.business_name)}" style="width:72px;height:72px;object-fit:contain;border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,0.12);display:inline-block">`
-    : `<span style="font-size:40px;line-height:1;display:inline-block">${esc(client.emoji || '🏪')}</span>`;
+    ? `<img src="${esc(client.emoji)}" alt="${esc(client.business_name)}" style="width:76px;height:76px;object-fit:contain;border-radius:18px;display:block">`
+    : `<span style="font-size:44px;line-height:1;display:block">${esc(client.emoji || '🏪')}</span>`;
 
   const extraHead = `
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -521,14 +521,14 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
         --ease-spring: cubic-bezier(0.4, 0, 0.2, 1);
       }
 
-      .btn:active, .theme-chip:active, .fmt-btn:active, .icon-opt:active {
+      .btn:active, .theme-chip:active, .icon-opt:active {
         transform: scale(0.97) !important;
         transition: transform 0.1s var(--ease-spring);
       }
 
       .theme-chip {
         display: inline-flex; align-items: center; gap: 8px;
-        padding: 8px 14px; border-radius: 12px; font-size: 12.5px; font-weight: 500;
+        padding: 9px 14px; border-radius: 12px; font-size: 12.5px; font-weight: 500;
         background: var(--s2); border: 1px solid var(--b1); color: var(--t2);
         cursor: pointer; transition: all 0.2s var(--ease-spring); user-select: none;
       }
@@ -549,9 +549,9 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       /* ── STANDEE PREVIEW CONTAINER ── */
       .preview-stage {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        background: radial-gradient(circle at 50% 30%, #161626 0%, #0c0c16 100%);
-        border: 1px solid var(--b1); border-radius: 24px; padding: 36px 20px;
-        min-height: 580px; position: relative; overflow: hidden;
+        background: radial-gradient(circle at 50% 20%, #171728 0%, #0a0a14 100%);
+        border: 1px solid var(--b1); border-radius: 28px; padding: 40px 20px;
+        min-height: 600px; position: relative; overflow: hidden;
       }
       .preview-backdrop-grid {
         position: absolute; inset: 0;
@@ -562,117 +562,163 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
 
       /* ── STANDEE CARD CORE ── */
       #standeeCard {
-        width: 100%; max-width: 320px; border-radius: 28px; padding: 30px 24px;
+        width: 100%; max-width: 324px; border-radius: 32px; padding: 28px 24px 24px;
         text-align: center; position: relative; z-index: 2;
-        box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+        box-shadow: 0 30px 70px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.2);
         transition: all 0.3s var(--ease-spring);
         font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       }
 
+      /* GOOGLE PILL */
+      .g-badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
+        padding: 5px 13px; border-radius: 20px; margin-bottom: 16px;
+        transition: all 0.2s var(--ease-spring);
+      }
+      .g-icon { width: 14px; height: 14px; flex-shrink: 0; }
+
+      /* LOGO EMBLEM DISK */
+      .logo-disk {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 86px; height: 86px; border-radius: 22px; margin: 0 auto 12px;
+        padding: 5px; position: relative;
+        transition: all 0.2s var(--ease-spring);
+      }
+
       /* THEME: Apple Minimalist Glass */
       #standeeCard.theme-apple {
-        background: rgba(255, 255, 255, 0.92);
-        backdrop-filter: blur(28px) saturate(180%);
-        -webkit-backdrop-filter: blur(28px) saturate(180%);
-        border: 1px solid rgba(255, 255, 255, 0.95);
-        color: #111827;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0,0,0,0.05);
+        background: rgba(255, 255, 255, 0.94);
+        backdrop-filter: blur(32px) saturate(200%);
+        -webkit-backdrop-filter: blur(32px) saturate(200%);
+        border: 1px solid rgba(255, 255, 255, 0.98);
+        color: #09090b;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255,255,255,1);
       }
-      #standeeCard.theme-apple .card-title { color: #000; letter-spacing: -0.02em; }
+      #standeeCard.theme-apple .g-badge { background: #f4f4f5; color: #18181b; border: 1px solid #e4e4e7; }
+      #standeeCard.theme-apple .logo-disk { background: #ffffff; box-shadow: 0 6px 20px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.06); }
+      #standeeCard.theme-apple .card-title { color: #000; letter-spacing: -0.025em; }
       #standeeCard.theme-apple .card-sub { color: #52525b; }
-      #standeeCard.theme-apple .qr-box { background: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.05); }
-      #standeeCard.theme-apple .tag-badge { background: rgba(0,0,0,0.06); color: #27272a; }
+      #standeeCard.theme-apple .qr-box { background: #ffffff; box-shadow: 0 8px 24px rgba(0,0,0,0.07); border: 1px solid rgba(0,0,0,0.06); }
+      #standeeCard.theme-apple .scan-hint { background: #f4f4f5; color: #3f3f46; }
+      #standeeCard.theme-apple .card-footer { color: #71717a; }
 
       /* THEME: M3 Dark */
       #standeeCard.theme-m3dark {
-        background: #1e1e1e; border: 1px solid #374151; color: #f8fafc;
-        box-shadow: 0 24px 50px rgba(0,0,0,0.6);
+        background: #19191d; border: 1px solid #2d2d34; color: #f8fafc;
+        box-shadow: 0 28px 60px rgba(0,0,0,0.7);
       }
-      #standeeCard.theme-m3dark .card-title { color: #f8fafc; }
+      #standeeCard.theme-m3dark .g-badge { background: #14532d; color: #4ade80; border: 1px solid rgba(74,222,128,0.25); }
+      #standeeCard.theme-m3dark .logo-disk { background: #23232a; border: 1px solid #33333d; }
+      #standeeCard.theme-m3dark .card-title { color: #f8fafc; letter-spacing: -0.02em; }
       #standeeCard.theme-m3dark .card-sub { color: #94a3b8; }
-      #standeeCard.theme-m3dark .qr-box { background: #121212; border: 1px solid #2d2d2d; }
-      #standeeCard.theme-m3dark .tag-badge { background: #14532d; color: #4ade80; }
+      #standeeCard.theme-m3dark .qr-box { background: #121215; border: 1px solid #2d2d34; }
+      #standeeCard.theme-m3dark .scan-hint { background: #23232a; color: #94a3b8; }
+      #standeeCard.theme-m3dark .card-footer { color: #64748b; }
 
       /* THEME: M3 Light */
       #standeeCard.theme-m3light {
-        background: #ffffff; border: 1px solid #e5e7eb; color: #111827;
-        box-shadow: 0 16px 40px rgba(0,0,0,0.08);
+        background: #ffffff; border: 1px solid #e2e8f0; color: #0f172a;
+        box-shadow: 0 20px 48px rgba(0,0,0,0.08);
       }
-      #standeeCard.theme-m3light .card-title { color: #111827; }
-      #standeeCard.theme-m3light .card-sub { color: #6b7280; }
+      #standeeCard.theme-m3light .g-badge { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+      #standeeCard.theme-m3light .logo-disk { background: #f8fafc; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
+      #standeeCard.theme-m3light .card-title { color: #0f172a; }
+      #standeeCard.theme-m3light .card-sub { color: #64748b; }
       #standeeCard.theme-m3light .qr-box { background: #f8fafc; border: 1px solid #e2e8f0; }
-      #standeeCard.theme-m3light .tag-badge { background: #dcfce7; color: #16a34a; }
+      #standeeCard.theme-m3light .scan-hint { background: #f1f5f9; color: #475569; }
+      #standeeCard.theme-m3light .card-footer { color: #94a3b8; }
 
       /* THEME: Glassmorphism Ocean */
       #standeeCard.theme-glass {
-        background: linear-gradient(135deg, rgba(14, 165, 233, 0.45) 0%, rgba(2, 132, 199, 0.55) 100%);
-        backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-        border: 1px solid rgba(255, 255, 255, 0.45); color: #ffffff;
-        box-shadow: 0 20px 50px rgba(2, 132, 199, 0.35);
+        background: linear-gradient(135deg, rgba(2, 132, 199, 0.55) 0%, rgba(14, 165, 233, 0.65) 100%);
+        backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
+        border: 1px solid rgba(255, 255, 255, 0.4); color: #ffffff;
+        box-shadow: 0 24px 60px rgba(2, 132, 199, 0.4);
       }
+      #standeeCard.theme-glass .g-badge { background: rgba(255,255,255,0.25); color: #fff; border: 1px solid rgba(255,255,255,0.4); }
+      #standeeCard.theme-glass .logo-disk { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.35); }
       #standeeCard.theme-glass .card-title { color: #ffffff; text-shadow: 0 2px 10px rgba(0,0,0,0.15); }
       #standeeCard.theme-glass .card-sub { color: #e0f2fe; }
-      #standeeCard.theme-glass .qr-box { background: #ffffff; box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
-      #standeeCard.theme-glass .tag-badge { background: rgba(255,255,255,0.25); color: #ffffff; border: 1px solid rgba(255,255,255,0.4); }
+      #standeeCard.theme-glass .qr-box { background: #ffffff; box-shadow: 0 10px 32px rgba(0,0,0,0.18); }
+      #standeeCard.theme-glass .scan-hint { background: rgba(255,255,255,0.2); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); }
+      #standeeCard.theme-glass .card-footer { color: #e0f2fe; }
 
       /* THEME: Neumorphic Soft */
       #standeeCard.theme-neumorphic {
         background: #e0e5ec; border: none; color: #334155;
-        box-shadow: 16px 16px 36px #b8b9be, -16px -16px 36px #ffffff;
+        box-shadow: 18px 18px 40px #b8b9be, -18px -18px 40px #ffffff;
+      }
+      #standeeCard.theme-neumorphic .g-badge {
+        background: #e0e5ec; color: #16a34a;
+        box-shadow: 3px 3px 6px #b8b9be, -3px -3px 6px #ffffff;
+      }
+      #standeeCard.theme-neumorphic .logo-disk {
+        background: #e0e5ec;
+        box-shadow: 4px 4px 8px #b8b9be, -4px -4px 8px #ffffff;
       }
       #standeeCard.theme-neumorphic .card-title { color: #1e293b; }
       #standeeCard.theme-neumorphic .card-sub { color: #64748b; }
       #standeeCard.theme-neumorphic .qr-box {
         background: #e0e5ec;
         box-shadow: inset 5px 5px 10px #b8b9be, inset -5px -5px 10px #ffffff;
-        padding: 14px; border-radius: 20px;
+        padding: 12px; border-radius: 20px;
       }
-      #standeeCard.theme-neumorphic .tag-badge {
-        background: #e0e5ec; color: #16a34a;
+      #standeeCard.theme-neumorphic .scan-hint {
+        background: #e0e5ec; color: #475569;
         box-shadow: 3px 3px 6px #b8b9be, -3px -3px 6px #ffffff;
       }
+      #standeeCard.theme-neumorphic .card-footer { color: #64748b; }
 
       /* THEME: Minimalist Pure */
       #standeeCard.theme-minimalist {
-        background: #ffffff; border: 2px solid #111827; color: #111827;
-        border-radius: 16px; box-shadow: 8px 8px 0px #111827;
+        background: #ffffff; border: 2px solid #000; color: #000;
+        border-radius: 20px; box-shadow: 8px 8px 0px #000;
       }
-      #standeeCard.theme-minimalist .card-title { color: #111827; font-weight: 800; }
-      #standeeCard.theme-minimalist .card-sub { color: #4b5563; font-weight: 500; }
-      #standeeCard.theme-minimalist .qr-box { background: #fff; border: 2px solid #111827; border-radius: 12px; }
-      #standeeCard.theme-minimalist .tag-badge { background: #111827; color: #ffffff; border-radius: 6px; }
+      #standeeCard.theme-minimalist .g-badge { background: #000; color: #fff; }
+      #standeeCard.theme-minimalist .logo-disk { background: #fff; border: 2px solid #000; }
+      #standeeCard.theme-minimalist .card-title { color: #000; font-weight: 800; }
+      #standeeCard.theme-minimalist .card-sub { color: #3f3f46; font-weight: 500; }
+      #standeeCard.theme-minimalist .qr-box { background: #fff; border: 2px solid #000; border-radius: 14px; }
+      #standeeCard.theme-minimalist .scan-hint { background: #f4f4f5; color: #000; border: 1px solid #000; }
+      #standeeCard.theme-minimalist .card-footer { color: #000; font-weight: 700; }
 
       /* THEME: Gradient Sunset & Aurora */
       #standeeCard.theme-gradient {
-        background: linear-gradient(145deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
+        background: linear-gradient(145deg, #4338ca 0%, #7c3aed 50%, #db2777 100%);
         border: 1px solid rgba(255,255,255,0.3); color: #ffffff;
-        box-shadow: 0 20px 50px rgba(124, 58, 237, 0.4);
+        box-shadow: 0 24px 60px rgba(124, 58, 237, 0.45);
       }
+      #standeeCard.theme-gradient .g-badge { background: rgba(255,255,255,0.25); color: #fff; border: 1px solid rgba(255,255,255,0.4); }
+      #standeeCard.theme-gradient .logo-disk { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.35); }
       #standeeCard.theme-gradient .card-title { color: #ffffff; }
-      #standeeCard.theme-gradient .card-sub { color: #fdf2f8; opacity: 0.9; }
-      #standeeCard.theme-gradient .qr-box { background: #ffffff; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-      #standeeCard.theme-gradient .tag-badge { background: rgba(255,255,255,0.25); color: #ffffff; border: 1px solid rgba(255,255,255,0.4); }
+      #standeeCard.theme-gradient .card-sub { color: #fdf2f8; opacity: 0.95; }
+      #standeeCard.theme-gradient .qr-box { background: #ffffff; box-shadow: 0 10px 32px rgba(0,0,0,0.22); }
+      #standeeCard.theme-gradient .scan-hint { background: rgba(255,255,255,0.2); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); }
+      #standeeCard.theme-gradient .card-footer { color: #fdf2f8; opacity: 0.9; }
 
       /* QR Canvas wrapper */
       .qr-box {
-        display: inline-block; padding: 12px; border-radius: 20px;
-        margin: 14px 0; position: relative; transition: all 0.2s var(--ease-spring);
+        display: inline-block; padding: 12px; border-radius: 22px;
+        margin: 14px 0 12px; position: relative; transition: all 0.2s var(--ease-spring);
       }
       .qr-canvas-el { display: block; border-radius: 12px; max-width: 175px; height: auto; margin: 0 auto; }
 
-      .card-emoji-header { margin-bottom: 8px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12)); }
-      .card-title { font-size: 20px; font-weight: 700; line-height: 1.25; margin-bottom: 4px; }
-      .card-sub { font-size: 12.5px; line-height: 1.45; max-width: 250px; margin: 0 auto 8px; }
-      .tag-badge {
-        display: inline-flex; align-items: center; gap: 4px;
-        font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
-        padding: 4px 10px; border-radius: 20px; margin-bottom: 8px;
+      .card-title { font-size: 20.5px; font-weight: 700; line-height: 1.22; margin-bottom: 5px; }
+      .card-sub { font-size: 12.5px; line-height: 1.45; max-width: 250px; margin: 0 auto 6px; }
+      .stars-row {
+        color: #f59e0b; font-size: 16px; margin: 5px 0 6px; letter-spacing: 3px;
+        filter: drop-shadow(0 2px 8px rgba(245,158,11,0.45));
+      }
+      .scan-hint {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px;
+        margin: 0 auto 10px;
       }
       .card-footer {
-        margin-top: 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
-        display: flex; align-items: center; justify-content: center; gap: 6px; opacity: 0.85;
+        margin-top: 6px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
       }
-      .stars-row { color: #f59e0b; font-size: 15px; margin: 4px 0 6px; letter-spacing: 2px; }
 
       /* Icon Options */
       .icon-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
@@ -693,7 +739,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
           min-height: auto !important; position: static !important;
         }
         #standeeCard {
-          max-width: 380px !important; margin: 40px auto !important;
+          max-width: 380px !important; margin: 30px auto !important;
           box-shadow: none !important; border: 1px solid #ddd !important;
           page-break-inside: avoid;
         }
@@ -713,7 +759,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1.05fr 1fr;gap:22px;align-items:start">
+    <div style="display:grid;grid-template-columns:1fr 1.05fr;gap:24px;align-items:start">
 
       <!-- ── LEFT: STUDIO CONTROLS ── -->
       <div class="ctrl-col" style="display:flex;flex-direction:column;gap:18px">
@@ -753,7 +799,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
           </div>
         </div>
 
-        <!-- 2. CARD CONTENT & BADGE CUSTOMIZER -->
+        <!-- 2. CARD CONTENT CUSTOMIZER -->
         <div class="ctrl-card">
           <div class="ctrl-sec-title"><i class="ti ti-typography"></i> Card Content &amp; Callout</div>
           <div class="form-grid" style="gap:12px">
@@ -765,22 +811,16 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
               <label class="form-label">Subtitle Prompt</label>
               <input type="text" id="inpSub" class="form-input" value="Scan to leave a Google review · Takes 30s ⭐" oninput="updateCardText()">
             </div>
-            <div class="form-2col">
-              <div class="form-group">
-                <label class="form-label">Table / Counter Badge</label>
-                <input type="text" id="inpBadge" class="form-input" value="Table 01" oninput="updateCardText()">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Center QR Icon</label>
-                <div class="icon-grid">
-                  <button type="button" class="icon-opt active" onclick="setCenterIcon('${isImageLogo ? 'logo' : esc(client.emoji)}', this)">
-                    ${isImageLogo ? `<img src="${esc(client.emoji)}" style="width:20px;height:20px;object-fit:contain;vertical-align:middle">` : (client.emoji||'🏪')}
-                  </button>
-                  <button type="button" class="icon-opt" onclick="setCenterIcon('⭐', this)">⭐</button>
-                  <button type="button" class="icon-opt" onclick="setCenterIcon('❤️', this)">❤️</button>
-                  <button type="button" class="icon-opt" onclick="setCenterIcon('G', this)"><b style="font-size:12px">G</b></button>
-                  <button type="button" class="icon-opt" onclick="setCenterIcon('', this)"><i class="ti ti-ban" style="font-size:14px"></i></button>
-                </div>
+            <div class="form-group">
+              <label class="form-label">Center QR Icon</label>
+              <div class="icon-grid">
+                <button type="button" class="icon-opt active" onclick="setCenterIcon('${isImageLogo ? 'logo' : esc(client.emoji)}', this)" title="Store Brand Logo">
+                  ${isImageLogo ? `<img src="${esc(client.emoji)}" style="width:20px;height:20px;object-fit:contain;vertical-align:middle">` : (client.emoji||'🏪')}
+                </button>
+                <button type="button" class="icon-opt" onclick="setCenterIcon('⭐', this)" title="Gold Star">⭐</button>
+                <button type="button" class="icon-opt" onclick="setCenterIcon('❤️', this)" title="Heart">❤️</button>
+                <button type="button" class="icon-opt" onclick="setCenterIcon('G', this)" title="Google G"><b style="font-size:12px">G</b></button>
+                <button type="button" class="icon-opt" onclick="setCenterIcon('', this)" title="Clean QR without icon"><i class="ti ti-ban" style="font-size:14px"></i></button>
               </div>
             </div>
           </div>
@@ -819,10 +859,24 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
 
           <!-- STANDEE CARD COMPONENT -->
           <div id="standeeCard" class="theme-apple">
-            <div id="cardBadgeWrap" style="margin-bottom:8px">
-              <span class="tag-badge" id="cardBadge">Table 01</span>
+            
+            <!-- GOOGLE BADGE -->
+            <div class="g-badge">
+              <svg class="g-icon" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"/>
+                <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.97 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+              </svg>
+              <span>Review us on Google</span>
             </div>
-            <div class="card-emoji-header" id="cardEmoji">${logoHeaderHtml}</div>
+
+            <!-- BRAND LOGO DISK -->
+            <div class="logo-disk" id="cardEmoji">
+              ${logoHeaderHtml}
+            </div>
+
+            <!-- TITLE & STARS -->
             <div class="card-title" id="cardTitle">Enjoyed your visit?</div>
             <div class="stars-row">★★★★★</div>
             <div class="card-sub" id="cardSub">Scan to leave a Google review · Takes 30s ⭐</div>
@@ -831,6 +885,10 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
             <div class="qr-box">
               <img id="qrImg" src="${qrDataUrl}" class="qr-canvas-el" width="175" height="175" alt="QR Code" style="display:block">
               <canvas id="qrCanvas" class="qr-canvas-el" width="180" height="180" style="display:none"></canvas>
+            </div>
+
+            <div class="scan-hint">
+              <i class="ti ti-camera"></i> Point camera to scan
             </div>
 
             <div class="card-footer">
@@ -874,7 +932,7 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
 
           if (currentTheme === 'm3dark') {
             darkColor = '#f8fafc';
-            lightColor = '#121212';
+            lightColor = '#121215';
           } else if (currentTheme === 'glass') {
             darkColor = '#0369a1';
             lightColor = '#ffffff';
@@ -953,19 +1011,9 @@ function qrPage(client, qrDataUrl, url, qrSvg='') {
       function updateCardText() {
         const title = document.getElementById('inpTitle').value || 'Enjoyed your visit?';
         const sub = document.getElementById('inpSub').value || 'Scan to leave a review';
-        const badge = document.getElementById('inpBadge').value.trim();
 
         document.getElementById('cardTitle').textContent = title;
         document.getElementById('cardSub').textContent = sub;
-
-        const badgeEl = document.getElementById('cardBadge');
-        const badgeWrap = document.getElementById('cardBadgeWrap');
-        if (badge) {
-          badgeEl.textContent = badge;
-          badgeWrap.style.display = 'block';
-        } else {
-          badgeWrap.style.display = 'none';
-        }
       }
 
       // ── PRINT STANDEE ──
