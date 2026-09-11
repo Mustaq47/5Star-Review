@@ -600,6 +600,8 @@ function regenerateReview() {
   triggerAgentGeneration();
 }
 
+let currentAlts = [];
+
 function onTA() {
   clrS();
   const ta = document.getElementById('ta');
@@ -616,23 +618,34 @@ function onTA() {
     .then(r => r.json())
     .then(data => {
       if (data.ok && data.suggestion) {
-        sugg = data.suggestion;
-        document.getElementById('th').innerHTML =
-          '<span class="th-badge">Suggestion</span> <span>' + esc(sugg) + ' (Tab to accept)</span>';
-        document.getElementById('ghost').innerHTML =
-          esc(ta.value) + '<span class="gs">' + esc(sugg) + '</span>';
+        const prim = typeof data.suggestion === 'string' ? data.suggestion : data.suggestion.primary;
+        const alts = (data.suggestion && data.suggestion.alternatives) ? data.suggestion.alternatives : [];
+        
+        sugg = prim || '';
+        currentAlts = alts;
+
+        if (sugg) {
+          document.getElementById('th').innerHTML =
+            '<span class="th-badge">AI Prediction</span> <span style="opacity:0.9">' + esc(sugg) + '</span> <span style="opacity:0.6;font-size:10px">(Tab or tap to complete)</span>';
+          document.getElementById('ghost').innerHTML =
+            esc(ta.value) + '<span class="gs">' + esc(sugg) + '</span>';
+        }
       }
     })
     .catch(() => {});
-  }, 120);
+  }, 100);
 }
 
-function acceptSuggestion() {
-  if (sugg) {
+function acceptSuggestion(customText) {
+  const textToAppend = customText || sugg;
+  if (textToAppend) {
     const ta = document.getElementById('ta');
-    ta.value += (ta.value.endsWith(' ') || sugg.startsWith(' ') ? '' : ' ') + sugg.trim();
+    const cleanAdd = textToAppend.trim();
+    const needsSpace = ta.value.length > 0 && !ta.value.endsWith(' ') && !textToAppend.startsWith(' ');
+    ta.value += (needsSpace ? ' ' : '') + cleanAdd + ' ';
     clrS();
     ta.focus();
+    onTA();
   }
 }
 
@@ -644,7 +657,7 @@ function onKey(e) {
 }
 
 function clrS() { clearTimeout(sgT); clrG(); document.getElementById('th').textContent=''; }
-function clrG() { sugg=''; document.getElementById('ghost').innerHTML=''; }
+function clrG() { sugg=''; currentAlts=[]; document.getElementById('ghost').innerHTML=''; }
 
 function buildPreview() {
   const txt = document.getElementById('ta').value.trim();
