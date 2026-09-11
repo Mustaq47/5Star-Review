@@ -248,34 +248,11 @@ ${isCoolSpicy ? `
 .root.light .re{color:rgba(14,116,144,0.6)}
 .root.dark  .re{color:rgba(186,230,253,0.45)}
 
-/* ── TEXTAREA & AGENT TOOLBAR ── */
-.agent-banner{
-  display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:8px;padding:4px 2px;
-}
-.agent-pill{
-  display:inline-flex;align-items:center;gap:6px;
-  background:rgba(14,165,233,0.12);border:1px solid rgba(56,189,248,0.3);
-  color:#0284c7;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;
-  letter-spacing:0.02em;
-}
-.root.dark .agent-pill{color:#38bdf8;background:rgba(14,165,233,0.14)}
-.agent-orb{width:7px;height:7px;border-radius:50%;background:#0284c7;animation:ao 1.6s ease-in-out infinite}
-.root.dark .agent-orb{background:#38bdf8}
-
-.agent-rewrite-btn{
-  background:transparent;border:1px solid rgba(14,165,233,0.3);
-  color:#0284c7;border-radius:8px;padding:3px 9px;font-size:11px;font-weight:600;
-  cursor:pointer;display:inline-flex;align-items:center;gap:4px;
-  transition:all .15s;
-}
-.root.dark .agent-rewrite-btn{color:#38bdf8;border-color:rgba(56,189,248,0.3)}
-.agent-rewrite-btn:hover{background:rgba(14,165,233,0.15)}
-
+/* ── TEXTAREA ── */
 .tw{position:relative;margin-bottom:8px}
 .ta{
   width:100%;border-radius:15px;font-family:'DM Sans',sans-serif;
-  font-size:14px;line-height:1.68;padding:14px 14px 44px;
+  font-size:14px;line-height:1.68;padding:14px;
   resize:none;min-height:130px;outline:none;
   backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   transition:all .4s;border:1px solid;
@@ -289,26 +266,12 @@ ${isCoolSpicy ? `
 
 .ghost{
   position:absolute;top:0;left:0;right:0;
-  padding:14px 14px 44px;font-family:'DM Sans',sans-serif;
+  padding:14px;font-family:'DM Sans',sans-serif;
   font-size:14px;line-height:1.68;color:transparent;
   pointer-events:none;white-space:pre-wrap;word-break:break-word;
 }
 .root.light .gs{color:rgba(2,132,199,0.38)}
 .root.dark  .gs{color:rgba(56,189,248,0.32)}
-
-/* ── AI PILL IN TEXTAREA ── */
-.aip{
-  position:absolute;bottom:10px;left:12px;
-  display:flex;align-items:center;gap:5px;
-  border-radius:20px;padding:3px 10px;font-size:10.5px;font-weight:500;letter-spacing:0.02em;
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:all .4s;border:1px solid;
-}
-.root.light .aip{background:rgba(255,255,255,0.85);border-color:rgba(186,230,253,0.9);color:#0369a1}
-.root.dark  .aip{background:rgba(14,165,233,0.08);border-color:rgba(56,189,248,0.2);color:#7dd3fc}
-.orbl{width:6px;height:6px;border-radius:50%;animation:ao 1.6s ease-in-out infinite;transition:background .4s}
-.root.light .orbl{background:#0284c7}
-.root.dark  .orbl{background:#38bdf8}
-@keyframes ao{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.18;transform:scale(.55)}}
 
 .th{
   font-size:11.5px;font-family:'DM Mono',monospace;min-height:18px;margin-bottom:12px;
@@ -460,32 +423,21 @@ ${isCoolSpicy ? `
         </div>
       </div>
 
-      <!-- ── STEP 2: WRITE (RAGFLOW AGENT POWERED) ── -->
+      <!-- ── STEP 2: WRITE ── -->
       <div class="panel" id="p1">
-        <div class="agent-banner">
-          <div class="agent-pill">
-            <div class="agent-orb"></div>
-            <span>RAGFlow AI Assistant</span>
-          </div>
-          <button class="agent-rewrite-btn" onclick="regenerateReview()" title="Generate fresh non-repetitive review">
-            <i class="ti ti-sparkles"></i> New Review
-          </button>
-        </div>
+        <div class="ph">Share your thoughts</div>
+        <div class="ps">Your review helps others decide.</div>
 
         <div class="tw">
           <div class="ghost" id="ghost"></div>
           <textarea class="ta" id="ta" rows="5"
-            placeholder="Select tags below or start typing..."
+            placeholder="What stood out about your visit?"
             oninput="onTA()" onkeydown="onKey(event)"></textarea>
-          <div class="aip"><div class="orbl"></div><span>AI Autocomplete · Tab to accept</span></div>
         </div>
 
         <div class="th" id="th" onclick="acceptSuggestion()"></div>
 
-        <div class="sl">
-          <span>Quick Tags (Select to compose)</span>
-          <span style="font-size:9.5px;opacity:0.75;font-weight:500;text-transform:none">Randomized for rating</span>
-        </div>
+        <div class="sl">Quick tags</div>
         <div class="tags" id="tags"></div>
 
         <div class="acts">
@@ -652,7 +604,7 @@ function onTA() {
   clrS();
   const ta = document.getElementById('ta');
   const v = ta.value;
-  if (!v || v.length < 3) return;
+  if (!v || v.trim().length === 0) return;
 
   clearTimeout(sgT);
   sgT = setTimeout(() => {
@@ -666,13 +618,13 @@ function onTA() {
       if (data.ok && data.suggestion) {
         sugg = data.suggestion;
         document.getElementById('th').innerHTML =
-          '<span class="th-badge">AI Suggestion</span> <span>' + esc(sugg) + ' (Tab to accept)</span>';
+          '<span class="th-badge">Suggestion</span> <span>' + esc(sugg) + ' (Tab to accept)</span>';
         document.getElementById('ghost').innerHTML =
           esc(ta.value) + '<span class="gs">' + esc(sugg) + '</span>';
       }
     })
     .catch(() => {});
-  }, 180);
+  }, 120);
 }
 
 function acceptSuggestion() {

@@ -167,18 +167,15 @@ async function generateReview({ slug, rating = 5, tags = [], previousText = '' }
       if (match) {
         bodySentences.push(match.phrase);
       } else {
-        // Dynamic descriptor if custom tag
         const cleanTag = selectedTag.replace(/^[^\w\s]+/, '').trim();
         bodySentences.push(`The ${cleanTag.toLowerCase()} was absolutely top-notch.`);
       }
     });
   } else {
-    // Pick 2 random highlights if no tags selected
     const randomHighlights = shuffle(pool).slice(0, 2);
     bodySentences = randomHighlights.map(h => h.phrase);
   }
 
-  // Ensure body sentences are unique and smoothly connected
   const uniqueBody = Array.from(new Set(bodySentences));
   const connectors = [' ', ' Moreover, ', ' Also, ', ' Plus, ', ' In addition, '];
   
@@ -196,67 +193,116 @@ async function generateReview({ slug, rating = 5, tags = [], previousText = '' }
 }
 
 /**
- * Contextual Next-Word / Next-Phrase Prediction Engine
+ * Rich Positive Contextual Next-Word / Next-Phrase Prediction Engine
  */
 function suggestNextWords({ text = '', rating = 5, slug = '' }) {
   if (!text) return null;
-  const trimmed = text.trim().toLowerCase();
+  const raw = text.toLowerCase();
+  const trimmed = raw.trim();
 
-  // Pattern dictionary for next word prediction
+  // Comprehensive Positive Pattern Continuations
   const PREDICTIONS = {
-    'food is': ' absolutely delicious and fresh',
-    'food was': ' flavorful, hot and served quickly',
-    'the food': ' quality exceeded all our expectations',
-    'ice cream': ' flavours are rich and super creamy',
-    'the ice creams': ' here are definitely the best in town',
-    'cream more': ' ice creams are delightfully rich and flavorful',
-    'milkshake': ' was thick, creamy and perfectly sweetened',
-    'the milkshakes': ' are thick, creamy and worth every rupee',
-    'pizza': ' was fresh, cheesy and crust was baked to perfection',
-    'the pizza': ' had generous toppings and perfect crisp crust',
-    'chicken': ' was extremely crispy outside and tender inside',
-    'fried chicken': ' is crispy, juicy and perfectly seasoned',
-    'service': ' was exceptionally quick and courteous',
-    'the service': ' was prompt and the staff were very welcoming',
-    'the staff': ' are friendly, polite and attentive',
-    'ambience': ' with the fairy lights is warm and inviting',
-    'the ambience': ' is magical with fairy lights and great vibes',
-    'fairy light': ' ambience creates a stunning cozy atmosphere',
-    'prices': ' are very affordable for the generous portions',
-    'value for': ' money is outstanding',
-    'highly': ' recommend this place to all food lovers',
-    'would': ' definitely come back again with friends and family',
-    'will': ' surely visit again soon',
-    'one of': ' the best food spots in town',
-    'great': ' place for family and evening hangouts',
-    'definitely': ' a must-visit spot in Nellore',
-    'loved': ' the friendly vibe and delicious menu'
+    // Single starter words
+    'i': ' really loved the food and the wonderful atmosphere here',
+    'i had': ' an extraordinary experience and thoroughly enjoyed the visit',
+    'i tried': ' their signature ice creams and crispy fried chicken — both were amazing',
+    'i ordered': ' the special pizza and thick shakes, and both tasted incredible',
+    'i visited': ' this place with family and was truly impressed by the quality',
+    'i loved': ' every single dish we ordered, especially the desserts',
+    'i would': ' highly recommend this place to everyone in town',
+    'we': ' had a fantastic time enjoying the delicious food and great music',
+    'we tried': ' different ice cream flavours and each one was rich and creamy',
+    'we loved': ' the crispy fried chicken and fresh hot pizzas',
+    'we ordered': ' thick milkshakes and pizzas — perfectly prepared and delicious',
+    'we had': ' an amazing evening hangout here with friends',
+    'the': ' food quality, taste, and hospitality here are outstanding',
+    'the food': ' is freshly prepared, flavorful and served hot',
+    'food is': ' absolutely delicious, hygienic and bursting with flavor',
+    'food was': ' extremely tasty, freshly made and served with a smile',
+    'taste': ' is genuinely authentic and top-tier in quality',
+    'taste was': ' beyond expectations — loved every single bite',
+    'the taste': ' of the dishes here is rich and memorable',
+    'ice cream': ' flavours are rich, smooth and delightfully creamy',
+    'ice creams': ' here are by far the best in town with so many varieties',
+    'the ice cream': ' was super creamy, rich and perfectly sweet',
+    'the ice creams': ' are creamy, delicious and full of flavor',
+    'cream more': ' ice cream specials are exceptionally good',
+    'milkshake': ' was thick, creamy, perfectly chilled and delicious',
+    'milkshakes': ' are thick, creamy and worth every rupee',
+    'the milkshake': ' had the perfect thick consistency and rich flavour',
+    'the milkshakes': ' are thick and full of rich flavor',
+    'pizza': ' was freshly baked, hot and loaded with gooey cheese and toppings',
+    'pizzas': ' here have a crispy crust and generous delicious toppings',
+    'the pizza': ' was baked to perfection with fresh ingredients',
+    'chicken': ' is seasoned to perfection, crispy outside and juicy inside',
+    'fried chicken': ' is super crunchy, flavorful and succulent',
+    'the chicken': ' was golden crisp and cooked to perfection',
+    'the fried chicken': ' is crispy, juicy and a must-try for everyone',
+    'service': ' was lightning fast, courteous and attentive',
+    'the service': ' was quick, attentive and very hospitable',
+    'staff': ' were welcoming, friendly and made us feel right at home',
+    'the staff': ' are friendly, polite and provide prompt service',
+    'ambience': ' with fairy lights creates a magical and cozy evening vibe',
+    'the ambience': ' is modern, vibrant and perfect for evening hangouts',
+    'fairy light': ' ambience looks stunning at night and gives great photo vibes',
+    'fairy lights': ' make the place look magical and comfortable',
+    'atmosphere': ' is clean, lively and great for family gatherings',
+    'prices': ' are very affordable and offer outstanding value for money',
+    'price': ' is completely reasonable for the top quality and portion size',
+    'value for': ' money is truly exceptional',
+    'great': ' food, wonderful ambience, and very warm service',
+    'best': ' food and dessert spot in the entire area',
+    'one of': ' the finest food and dessert spots in town',
+    'highly': ' recommend this wonderful place to all food lovers',
+    'definitely': ' coming back again with friends and family soon',
+    'will': ' definitely visit again and try more menu items',
+    'always': ' a pleasure visiting here — consistent quality and taste',
+    'really': ' enjoyed our evening visit and the great hospitality',
+    'such a': ' delightful experience with top-notch food and service',
+    'loved': ' the flavors, cleanliness, and polite staff behavior',
+    'worth': ' visiting for anyone looking for delicious food and great vibes',
+    'clean': ' and well-maintained seating with great hygiene',
+    'must': ' try their signature ice creams and crispy fried chicken'
   };
 
-  // Check end-of-phrase matches
+  // 1. Direct endsWith match
   for (const [trigger, continuation] of Object.entries(PREDICTIONS)) {
     if (trimmed.endsWith(trigger)) {
       return continuation;
     }
   }
 
-  // Word-level partial match
+  // 2. StartsWith single word match if only 1-2 words typed
+  if (PREDICTIONS[trimmed]) {
+    return PREDICTIONS[trimmed];
+  }
+
+  // 3. Fallback word-level matching
   const words = trimmed.split(/\s+/);
   const lastWord = words[words.length - 1];
 
   const WORD_PREDICTIONS = {
-    'best': ' food and dessert spot in town',
-    'fresh': ' ingredients and delicious taste',
+    'good': ' taste, fresh ingredients and prompt service',
+    'nice': ' ambience with friendly staff and tasty food',
+    'super': ' tasty food and wonderful atmosphere',
+    'amazing': ' experience and truly delicious food',
+    'excellent': ' quality, courteous service and great value',
+    'fresh': ' ingredients, delicious taste and quick service',
     'crispy': ' and juicy in every single bite',
-    'creamy': ' and thick with lots of flavor',
-    'delicious': ' food and wonderful ambience',
-    'friendly': ' staff and great hospitality',
+    'creamy': ' and thick with lots of delightful flavor',
+    'delicious': ' food and wonderful fairy light ambience',
+    'friendly': ' staff and great hospitality throughout',
     'affordable': ' prices with generous portion sizes',
-    'recommend': ' visiting with friends and family'
+    'recommend': ' visiting with friends and family for a great time'
   };
 
   if (WORD_PREDICTIONS[lastWord]) {
     return ' ' + WORD_PREDICTIONS[lastWord];
+  }
+
+  // Generic positive continuation if typing ends with space
+  if (raw.endsWith(' ')) {
+    return 'is absolutely delicious, fresh and worth visiting';
   }
 
   return null;
