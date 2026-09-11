@@ -490,6 +490,11 @@ const SLUG     = '${esc(client.slug)}';
 
 let dark=false, rating=5, sugg='', sgT=null, activeTags=new Set();
 
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function toggleMode() {
   dark = !dark;
   document.getElementById('root').className = 'root ' + (dark?'dark':'light');
