@@ -305,9 +305,9 @@ input::placeholder{color:rgba(180,160,220,0.3)}
   <div class="brand-sub">Admin dashboard — sign in to continue</div>
   ${error ? `<div class="err">⚠️ ${error}</div>` : ''}
   <label>Email address</label>
-  <input type="email" name="email" placeholder="admin@reviewpro.in" required autocomplete="email">
+  <input type="email" name="email" required autocomplete="email">
   <label>Password</label>
-  <input type="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+  <input type="password" name="password" required autocomplete="current-password">
   <button class="btn" type="submit">Sign in →</button>
 </form>
 </body></html>`;
