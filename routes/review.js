@@ -78,11 +78,9 @@ function reviewPage(client, tags) {
 
 ${isCoolSpicy ? `
 .bp {
-  background: linear-gradient(135deg, #0284c7 0%, #38bdf8 28%, #fb7185 72%, #f43f5e 100%) !important;
-  border-color: rgba(255,255,255,0.28) !important;
-  box-shadow: 0 6px 24px rgba(2,132,199,0.28), 0 3px 12px rgba(244,63,94,0.25) !important;
-  color: #ffffff !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.18);
+  background: linear-gradient(135deg, #1d4ed8 0%, #dc2626 100%) !important;
+  border-color: rgba(255,255,255,0.2) !important;
+  box-shadow: 0 6px 24px rgba(220,38,38,0.32) !important;
 }
 .root.light .o1{background:radial-gradient(circle,rgba(29,78,216,0.26) 0%,transparent 70%) !important}
 .root.dark  .o1{background:radial-gradient(circle,rgba(29,78,216,0.36) 0%,transparent 70%) !important}
@@ -191,19 +189,21 @@ ${isCoolSpicy ? `
 }
 .root.light .sb{background:rgba(255,255,255,0.55);border-color:rgba(186,230,253,0.85)}
 .root.dark  .sb{background:rgba(14,165,233,0.06);border-color:rgba(56,189,248,0.16)}
-.root.light .sb.lit{background:rgba(254,215,40,0.22);border-color:rgba(251,191,36,0.6);transform:scale(1.07) translateY(-2px);box-shadow:0 7px 22px rgba(200,155,0,0.22),inset 0 1px 0 rgba(255,255,255,0.6)}
-.root.dark  .sb.lit{background:rgba(251,191,36,0.14);border-color:rgba(251,191,36,0.36);transform:scale(1.07) translateY(-2px);box-shadow:0 7px 26px rgba(180,140,0,0.35),inset 0 1px 0 rgba(255,255,255,0.08)}
+.root.light .sb.lit{background:rgba(254,215,40,0.22);border-color:rgba(251,191,36,0.6);transform:scale(1.07) translateY(-2px);box-shadow:0 7px 22px rgba(245,158,11,0.25),inset 0 1px 0 rgba(255,255,255,0.6)}
+.root.dark  .sb.lit{background:rgba(251,191,36,0.16);border-color:rgba(251,191,36,0.45);transform:scale(1.07) translateY(-2px);box-shadow:0 7px 26px rgba(245,158,11,0.35),inset 0 1px 0 rgba(255,255,255,0.08)}
 .sb.lit{animation:sPop .26s cubic-bezier(.34,1.5,.64,1) both}
 @keyframes sPop{0%{transform:scale(.65)}60%{transform:scale(1.13) translateY(-3px)}100%{transform:scale(1.07) translateY(-2px)}}
 .sb::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.18) 50%,transparent 100%);transform:translateX(-100%);pointer-events:none}
 .sb.lit::after{animation:sweep .5s ease-out forwards}
 @keyframes sweep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-.sg{font-size:24px;line-height:1;filter:saturate(0) brightness(0.45);transition:filter .2s;position:relative;z-index:1}
-.sb.lit .sg{filter:saturate(1) drop-shadow(0 0 6px rgba(251,191,36,0.55))}
+.sg{font-size:24px;line-height:1;color:rgba(148,163,184,0.4);transition:all .2s;position:relative;z-index:1}
+.root.dark .sg{color:rgba(100,116,139,0.4)}
+.sb.lit .sg{color:#f59e0b !important;filter:drop-shadow(0 0 8px rgba(245,158,11,0.7))}
 .sn{font-size:9.5px;font-weight:600;font-family:'DM Mono',monospace;transition:color .3s;position:relative;z-index:1}
 .root.light .sn{color:rgba(14,116,144,0.6)}
 .root.dark  .sn{color:rgba(186,230,253,0.5)}
-.sb.lit .sn{color:rgba(140,100,0,0.9) !important}
+.sb.lit .sn{color:#d97706 !important}
+.root.dark .sb.lit .sn{color:#fbbf24 !important}
 
 .sx{display:flex;justify-content:space-between;margin-bottom:22px;padding:0 2px}
 .sx span{font-size:10px;transition:color .4s}
@@ -394,11 +394,11 @@ ${isCoolSpicy ? `
         <div class="ps">Tap a star to rate your experience.</div>
 
         <div class="star-row" id="starRow">
-          <div class="sb" onclick="rate(1)"><span class="sg">⭐</span><span class="sn">1</span></div>
-          <div class="sb" onclick="rate(2)"><span class="sg">⭐</span><span class="sn">2</span></div>
-          <div class="sb" onclick="rate(3)"><span class="sg">⭐</span><span class="sn">3</span></div>
-          <div class="sb" onclick="rate(4)"><span class="sg">⭐</span><span class="sn">4</span></div>
-          <div class="sb" onclick="rate(5)"><span class="sg">⭐</span><span class="sn">5</span></div>
+          <div class="sb" onclick="rate(1)"><i class="ti ti-star-filled sg"></i><span class="sn">1</span></div>
+          <div class="sb" onclick="rate(2)"><i class="ti ti-star-filled sg"></i><span class="sn">2</span></div>
+          <div class="sb" onclick="rate(3)"><i class="ti ti-star-filled sg"></i><span class="sn">3</span></div>
+          <div class="sb" onclick="rate(4)"><i class="ti ti-star-filled sg"></i><span class="sn">4</span></div>
+          <div class="sb" onclick="rate(5)"><i class="ti ti-star-filled sg"></i><span class="sn">5</span></div>
         </div>
         <div class="sx"><span>Terrible</span><span>Neutral</span><span>Excellent</span></div>
 
@@ -561,7 +561,7 @@ function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 
 function buildPreview() {
   const txt = document.getElementById('ta').value.trim();
-  document.getElementById('pst').textContent = '⭐'.repeat(rating);
+  document.getElementById('pst').innerHTML = '<i class="ti ti-star-filled" style="color:#f59e0b;filter:drop-shadow(0 0 8px rgba(245,158,11,0.6));margin:0 2px"></i>'.repeat(rating);
   document.getElementById('pwd').textContent = WORDS[rating-1];
   const box = document.getElementById('ptx');
   if (txt) { box.textContent=txt; box.classList.add('has'); }
