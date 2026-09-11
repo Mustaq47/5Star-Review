@@ -82,8 +82,12 @@ router.get('/clients/:id/qr', requireAuth, async (req, res) => {
   const client = db.prepare('SELECT * FROM clients WHERE id=?').get(req.params.id);
   if (!client) return res.status(404).send('Not found');
   const url = req.protocol + '://' + req.get('host') + '/r/' + client.slug;
-  const qr = await QRCode.toDataURL(url, { width:400, margin:2, color:{ dark:'#1a1a2e', light:'#ffffff' }});
-  res.send(qrPage(client, qr, url));
+  const qr = await QRCode.toDataURL(url, { width: 800, margin: 1, errorCorrectionLevel: 'H', color: { dark: '#0a0a0f', light: '#ffffff' } });
+  let qrSvg = '';
+  try {
+    qrSvg = await QRCode.toString(url, { type: 'svg', margin: 1, errorCorrectionLevel: 'H' });
+  } catch(e) {}
+  res.send(qrPage(client, qr, url, qrSvg));
 });
 
 // ── ANALYTICS ─────────────────────────────────────────────────────
@@ -501,56 +505,492 @@ function clientFormPage(client, error) {
   `);
 }
 
-// ── QR PAGE ────────────────────────────────────────────────────────
-function qrPage(client, qrDataUrl, url) {
-  return shell('QR Code — '+client.business_name, `
+// ── QR STUDIO & STANDEE GENERATOR (7 THEMES + APPLE DESIGN) ─────────
+function qrPage(client, qrDataUrl, url, qrSvg='') {
+  const extraHead = `
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>
+      /* ── THEME PALETTES & TOKENS ── */
+      :root {
+        --ease-spring: cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .btn:active, .theme-chip:active, .fmt-btn:active, .icon-opt:active {
+        transform: scale(0.97) !important;
+        transition: transform 0.1s var(--ease-spring);
+      }
+
+      .theme-chip {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 8px 14px; border-radius: 12px; font-size: 12.5px; font-weight: 500;
+        background: var(--s2); border: 1px solid var(--b1); color: var(--t2);
+        cursor: pointer; transition: all 0.2s var(--ease-spring); user-select: none;
+      }
+      .theme-chip:hover { background: var(--s3); color: var(--t1); border-color: var(--b2); }
+      .theme-chip.active {
+        background: rgba(124,77,255,0.18); border-color: var(--accent); color: #fff;
+        box-shadow: 0 0 16px rgba(124,77,255,0.25);
+      }
+      .theme-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+
+      /* ── CONTROLS PANEL ── */
+      .ctrl-card { background: var(--s1); border: 1px solid var(--b1); border-radius: 18px; padding: 22px; }
+      .ctrl-sec-title {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--t3); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+      }
+
+      /* ── STANDEE PREVIEW CONTAINER ── */
+      .preview-stage {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: radial-gradient(circle at 50% 30%, #161626 0%, #0c0c16 100%);
+        border: 1px solid var(--b1); border-radius: 24px; padding: 36px 20px;
+        min-height: 580px; position: relative; overflow: hidden;
+      }
+      .preview-backdrop-grid {
+        position: absolute; inset: 0;
+        background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                          linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+        background-size: 24px 24px; pointer-events: none;
+      }
+
+      /* ── STANDEE CARD CORE ── */
+      #standeeCard {
+        width: 100%; max-width: 320px; border-radius: 28px; padding: 30px 24px;
+        text-align: center; position: relative; z-index: 2;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+        transition: all 0.3s var(--ease-spring);
+        font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      /* THEME: Apple Minimalist Glass */
+      #standeeCard.theme-apple {
+        background: rgba(255, 255, 255, 0.88);
+        backdrop-filter: blur(28px) saturate(180%);
+        -webkit-backdrop-filter: blur(28px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.95);
+        color: #111827;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0,0,0,0.05);
+      }
+      #standeeCard.theme-apple .card-title { color: #000; letter-spacing: -0.02em; }
+      #standeeCard.theme-apple .card-sub { color: #52525b; }
+      #standeeCard.theme-apple .qr-box { background: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.05); }
+      #standeeCard.theme-apple .tag-badge { background: rgba(0,0,0,0.06); color: #27272a; }
+
+      /* THEME: M3 Dark */
+      #standeeCard.theme-m3dark {
+        background: #1e1e1e; border: 1px solid #374151; color: #f8fafc;
+        box-shadow: 0 24px 50px rgba(0,0,0,0.6);
+      }
+      #standeeCard.theme-m3dark .card-title { color: #f8fafc; }
+      #standeeCard.theme-m3dark .card-sub { color: #94a3b8; }
+      #standeeCard.theme-m3dark .qr-box { background: #121212; border: 1px solid #2d2d2d; }
+      #standeeCard.theme-m3dark .tag-badge { background: #14532d; color: #4ade80; }
+
+      /* THEME: M3 Light */
+      #standeeCard.theme-m3light {
+        background: #ffffff; border: 1px solid #e5e7eb; color: #111827;
+        box-shadow: 0 16px 40px rgba(0,0,0,0.08);
+      }
+      #standeeCard.theme-m3light .card-title { color: #111827; }
+      #standeeCard.theme-m3light .card-sub { color: #6b7280; }
+      #standeeCard.theme-m3light .qr-box { background: #f8fafc; border: 1px solid #e2e8f0; }
+      #standeeCard.theme-m3light .tag-badge { background: #dcfce7; color: #16a34a; }
+
+      /* THEME: Glassmorphism Ocean */
+      #standeeCard.theme-glass {
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.35) 0%, rgba(2, 132, 199, 0.45) 100%);
+        backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+        border: 1px solid rgba(255, 255, 255, 0.4); color: #ffffff;
+        box-shadow: 0 20px 50px rgba(2, 132, 199, 0.3);
+      }
+      #standeeCard.theme-glass .card-title { color: #ffffff; text-shadow: 0 2px 10px rgba(0,0,0,0.15); }
+      #standeeCard.theme-glass .card-sub { color: #e0f2fe; }
+      #standeeCard.theme-glass .qr-box { background: #ffffff; box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
+      #standeeCard.theme-glass .tag-badge { background: rgba(255,255,255,0.25); color: #ffffff; border: 1px solid rgba(255,255,255,0.4); }
+
+      /* THEME: Neumorphic Soft */
+      #standeeCard.theme-neumorphic {
+        background: #e0e5ec; border: none; color: #334155;
+        box-shadow: 16px 16px 36px #b8b9be, -16px -16px 36px #ffffff;
+      }
+      #standeeCard.theme-neumorphic .card-title { color: #1e293b; }
+      #standeeCard.theme-neumorphic .card-sub { color: #64748b; }
+      #standeeCard.theme-neumorphic .qr-box {
+        background: #e0e5ec;
+        box-shadow: inset 5px 5px 10px #b8b9be, inset -5px -5px 10px #ffffff;
+        padding: 14px; border-radius: 20px;
+      }
+      #standeeCard.theme-neumorphic .tag-badge {
+        background: #e0e5ec; color: #16a34a;
+        box-shadow: 3px 3px 6px #b8b9be, -3px -3px 6px #ffffff;
+      }
+
+      /* THEME: Minimalist Pure */
+      #standeeCard.theme-minimalist {
+        background: #ffffff; border: 2px solid #111827; color: #111827;
+        border-radius: 16px; box-shadow: 8px 8px 0px #111827;
+      }
+      #standeeCard.theme-minimalist .card-title { color: #111827; font-weight: 800; }
+      #standeeCard.theme-minimalist .card-sub { color: #4b5563; font-weight: 500; }
+      #standeeCard.theme-minimalist .qr-box { background: #fff; border: 2px solid #111827; border-radius: 12px; }
+      #standeeCard.theme-minimalist .tag-badge { background: #111827; color: #ffffff; border-radius: 6px; }
+
+      /* THEME: Gradient Sunset & Aurora */
+      #standeeCard.theme-gradient {
+        background: linear-gradient(145deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
+        border: 1px solid rgba(255,255,255,0.3); color: #ffffff;
+        box-shadow: 0 20px 50px rgba(124, 58, 237, 0.4);
+      }
+      #standeeCard.theme-gradient .card-title { color: #ffffff; }
+      #standeeCard.theme-gradient .card-sub { color: #fdf2f8; opacity: 0.9; }
+      #standeeCard.theme-gradient .qr-box { background: #ffffff; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+      #standeeCard.theme-gradient .tag-badge { background: rgba(255,255,255,0.25); color: #ffffff; border: 1px solid rgba(255,255,255,0.4); }
+
+      /* QR Canvas wrapper */
+      .qr-box {
+        display: inline-block; padding: 12px; border-radius: 20px;
+        margin: 16px 0; position: relative; transition: all 0.2s var(--ease-spring);
+      }
+      .qr-canvas-el { display: block; border-radius: 12px; max-width: 170px; height: auto; }
+
+      .card-emoji-header { font-size: 38px; line-height: 1; margin-bottom: 8px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12)); }
+      .card-title { font-size: 20px; font-weight: 700; line-height: 1.25; margin-bottom: 4px; }
+      .card-sub { font-size: 12.5px; line-height: 1.45; max-width: 250px; margin: 0 auto 10px; }
+      .tag-badge {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+        padding: 4px 10px; border-radius: 20px; margin-bottom: 8px;
+      }
+      .card-footer {
+        margin-top: 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+        display: flex; align-items: center; justify-content: center; gap: 6px; opacity: 0.85;
+      }
+      .stars-row { color: #f59e0b; font-size: 15px; margin: 4px 0 6px; letter-spacing: 2px; }
+
+      /* Format toggle */
+      .fmt-group { display: flex; gap: 6px; background: var(--s2); padding: 4px; border-radius: 12px; border: 1px solid var(--b1); }
+      .fmt-btn {
+        flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 500; border-radius: 8px;
+        background: transparent; border: none; color: var(--t2); cursor: pointer; transition: all 0.15s;
+        display: flex; align-items: center; justify-content: center; gap: 5px;
+      }
+      .fmt-btn.active { background: var(--s3); color: var(--t1); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+
+      /* Icon Options */
+      .icon-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+      .icon-opt {
+        padding: 8px 4px; border-radius: 10px; background: var(--s2); border: 1px solid var(--b1);
+        color: var(--t1); cursor: pointer; text-align: center; font-size: 16px; transition: all 0.15s;
+      }
+      .icon-opt.active { background: rgba(124,77,255,0.2); border-color: var(--accent); }
+
+      /* Print guidelines */
+      @media print {
+        body { background: #fff !important; color: #000 !important; }
+        .topbar, .page-hdr, .ctrl-col, .no-print, .preview-backdrop-grid { display: none !important; }
+        .page { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+        .preview-stage {
+          background: #fff !important; border: none !important; padding: 0 !important;
+          min-height: auto !important; position: static !important;
+        }
+        #standeeCard {
+          max-width: 380px !important; margin: 40px auto !important;
+          box-shadow: none !important; border: 1px solid #ddd !important;
+          page-break-inside: avoid;
+        }
+      }
+    </style>
+  `;
+
+  return shell('QR Studio & Standees — ' + client.business_name, `
     <div class="page-hdr">
       <div>
-        <div class="page-title">QR Code — ${esc(client.business_name)}</div>
-        <div class="page-sub">Print and place at the business location</div>
+        <div class="page-title">QR Studio &amp; Table Standee Generator</div>
+        <div class="page-sub">${esc(client.emoji)} ${esc(client.business_name)} · 7 Design Themes with Live Apple-Grade Preview</div>
       </div>
-      <a href="/admin" class="btn btn-ghost"><i class="ti ti-arrow-left"></i> Back</a>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:18px;align-items:start">
-
-      <div class="card card-p" style="text-align:center">
-        <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--t3);margin-bottom:16px">QR Code</div>
-        <img src="${qrDataUrl}" style="width:100%;max-width:220px;border-radius:14px;border:4px solid var(--s3)" alt="QR Code">
-        <div style="margin-top:14px;font-size:11px;font-family:'DM Mono',monospace;color:var(--t3);word-break:break-all;line-height:1.5">${url}</div>
-        <div class="divider"></div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <a href="${qrDataUrl}" download="qr-${client.slug}.png" class="btn btn-primary" style="width:100%;justify-content:center">
-            <i class="ti ti-download"></i> Download PNG
-          </a>
-          <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="navigator.clipboard.writeText('${url}').then(()=>{this.innerHTML='<i class=\\'ti ti-check\\'></i> Copied!';setTimeout(()=>{this.innerHTML='<i class=\\'ti ti-copy\\'></i> Copy URL'},2000)})">
-            <i class="ti ti-copy"></i> Copy URL
-          </button>
-          <a href="/r/${client.slug}" target="_blank" class="btn btn-ghost" style="width:100%;justify-content:center">
-            <i class="ti ti-external-link"></i> Preview page
-          </a>
-        </div>
-      </div>
-
-      <div class="card card-p">
-        <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--t3);margin-bottom:16px">Print card template</div>
-        <div id="printCard" style="background:#fff;border-radius:18px;padding:28px 22px;text-align:center;max-width:260px;margin:0 auto;font-family:'DM Sans',sans-serif">
-          <div style="font-size:32px;margin-bottom:6px">${client.emoji}</div>
-          <div style="font-size:17px;font-weight:700;color:#111;margin-bottom:2px">${esc(client.business_name)}</div>
-          <div style="font-size:11px;color:#888;margin-bottom:4px">${esc(client.category)}</div>
-          <div style="height:1px;background:#eee;margin:12px 0"></div>
-          <div style="font-size:13px;color:#555;margin-bottom:14px;font-weight:500">Enjoyed your visit? 😊</div>
-          <img src="${qrDataUrl}" style="width:130px;height:130px;border-radius:10px" alt="QR">
-          <div style="margin-top:12px;font-size:12px;color:#777;font-weight:500">Scan to leave a Google review</div>
-          <div style="font-size:11px;color:#aaa;margin-top:3px">Takes less than 1 minute ⭐</div>
-          <div style="margin-top:10px;font-size:10px;color:#ccc">PH: 8480080018</div>
-        </div>
-        <div style="margin-top:14px;font-size:11.5px;color:var(--t3);text-align:center;line-height:1.5">
-          Right-click the card above and Save Image,<br>then print at A6 / postcard size &amp; laminate.
-        </div>
+      <div style="display:flex;gap:8px">
+        <a href="/r/${client.slug}" target="_blank" class="btn btn-ghost"><i class="ti ti-external-link"></i> Live Review Page</a>
+        <a href="/admin" class="btn btn-ghost"><i class="ti ti-arrow-left"></i> Dashboard</a>
       </div>
     </div>
-  `);
+
+    <div style="display:grid;grid-template-columns:1.05fr 1fr;gap:22px;align-items:start">
+
+      <!-- ── LEFT: STUDIO CONTROLS ── -->
+      <div class="ctrl-col" style="display:flex;flex-direction:column;gap:18px">
+
+        <!-- 1. THEME SELECTOR (7 CORE THEMES) -->
+        <div class="ctrl-card">
+          <div class="ctrl-sec-title"><i class="ti ti-palette"></i> Design Theme (7 Paradigms)</div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+            <div class="theme-chip active" onclick="setTheme('apple', this)">
+              <span class="theme-dot" style="background:#000;border:1px solid #fff"></span>
+              <span>🍏 Apple Glass</span>
+            </div>
+            <div class="theme-chip" onclick="setTheme('m3dark', this)">
+              <span class="theme-dot" style="background:#4ade80"></span>
+              <span>🌙 M3 Dark</span>
+            </div>
+            <div class="theme-chip" onclick="setTheme('m3light', this)">
+              <span class="theme-dot" style="background:#16a34a"></span>
+              <span>☀️ M3 Light</span>
+            </div>
+            <div class="theme-chip" onclick="setTheme('glass', this)">
+              <span class="theme-dot" style="background:#0ea5e9"></span>
+              <span>💎 Glass Ocean</span>
+            </div>
+            <div class="theme-chip" onclick="setTheme('neumorphic', this)">
+              <span class="theme-dot" style="background:#94a3b8"></span>
+              <span>🟢 Neumorphic</span>
+            </div>
+            <div class="theme-chip" onclick="setTheme('minimalist', this)">
+              <span class="theme-dot" style="background:#111827"></span>
+              <span>📱 Minimalist</span>
+            </div>
+            <div class="theme-chip" style="grid-column:span 2" onclick="setTheme('gradient', this)">
+              <span class="theme-dot" style="background:linear-gradient(45deg,#4f46e5,#db2777)"></span>
+              <span>🌈 Sunset &amp; Aurora Gradient</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. CARD CONTENT & BADGE CUSTOMIZER -->
+        <div class="ctrl-card">
+          <div class="ctrl-sec-title"><i class="ti ti-typography"></i> Card Content &amp; Callout</div>
+          <div class="form-grid" style="gap:12px">
+            <div class="form-group">
+              <label class="form-label">Headline CTA</label>
+              <input type="text" id="inpTitle" class="form-input" value="Enjoyed your visit?" oninput="updateCardText()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Subtitle Prompt</label>
+              <input type="text" id="inpSub" class="form-input" value="Scan to leave a Google review · Takes 30s ⭐" oninput="updateCardText()">
+            </div>
+            <div class="form-2col">
+              <div class="form-group">
+                <label class="form-label">Table / Counter Badge</label>
+                <input type="text" id="inpBadge" class="form-input" value="Table 01" oninput="updateCardText()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Center QR Icon</label>
+                <div class="icon-grid">
+                  <button type="button" class="icon-opt active" onclick="setCenterIcon('${esc(client.emoji)}', this)">${client.emoji}</button>
+                  <button type="button" class="icon-opt" onclick="setCenterIcon('⭐', this)">⭐</button>
+                  <button type="button" class="icon-opt" onclick="setCenterIcon('❤️', this)">❤️</button>
+                  <button type="button" class="icon-opt" onclick="setCenterIcon('G', this)"><b style="font-size:12px">G</b></button>
+                  <button type="button" class="icon-opt" onclick="setCenterIcon('', this)"><i class="ti ti-ban" style="font-size:14px"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. ACTIONS & EXPORTS -->
+        <div class="ctrl-card">
+          <div class="ctrl-sec-title"><i class="ti ti-printer"></i> Print &amp; HD Exports</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <button class="btn btn-primary" onclick="printStandee()" style="justify-content:center">
+              <i class="ti ti-printer"></i> Print Standee
+            </button>
+            <button class="btn btn-ghost" onclick="downloadStandeePng()" style="justify-content:center">
+              <i class="ti ti-photo"></i> Export HD PNG
+            </button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <a href="${qrDataUrl}" download="qr-raw-${client.slug}.png" class="btn btn-ghost" style="justify-content:center">
+              <i class="ti ti-qrcode"></i> Raw QR PNG
+            </a>
+            <button class="btn btn-ghost" onclick="copyLink()" id="copyBtn" style="justify-content:center">
+              <i class="ti ti-copy"></i> Copy Link
+            </button>
+          </div>
+          <div style="margin-top:14px;font-size:11px;font-family:'DM Mono',monospace;color:var(--t3);word-break:break-all;text-align:center;padding:8px 12px;background:var(--s2);border-radius:8px">
+            ${url}
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── RIGHT: LIVE 1:1 PREVIEW STAGE ── -->
+      <div style="position:sticky;top:76px">
+        <div class="preview-stage">
+          <div class="preview-backdrop-grid"></div>
+
+          <!-- STANDEE CARD COMPONENT -->
+          <div id="standeeCard" class="theme-apple">
+            <div id="cardBadgeWrap" style="margin-bottom:8px">
+              <span class="tag-badge" id="cardBadge">Table 01</span>
+            </div>
+            <div class="card-emoji-header" id="cardEmoji">${client.emoji}</div>
+            <div class="card-title" id="cardTitle">Enjoyed your visit?</div>
+            <div class="stars-row">★★★★★</div>
+            <div class="card-sub" id="cardSub">Scan to leave a Google review · Takes 30s ⭐</div>
+
+            <!-- QR CODE BOX -->
+            <div class="qr-box">
+              <canvas id="qrCanvas" class="qr-canvas-el" width="180" height="180"></canvas>
+            </div>
+
+            <div class="card-footer">
+              <span>${esc(client.business_name)}</span>
+              <span>·</span>
+              <span>${esc(client.category)}</span>
+            </div>
+          </div>
+
+          <div class="no-print" style="margin-top:18px;font-size:11.5px;color:var(--t3);text-align:center;display:flex;align-items:center;gap:6px">
+            <i class="ti ti-sparkles" style="color:var(--accent)"></i>
+            <span>Interactive Live Preview · 100% Print-ready A6 acrylic stand</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <script>
+      const RAW_URL = "${url}";
+      let currentTheme = 'apple';
+      let currentCenterIcon = '${esc(client.emoji)}';
+
+      // ── RENDER QR CODE WITH CENTER BADGE ON CANVAS ──
+      function renderQR() {
+        const canvas = document.getElementById('qrCanvas');
+        if (!canvas) return;
+
+        // Colors per theme
+        let darkColor = '#000000';
+        let lightColor = '#ffffff';
+
+        if (currentTheme === 'm3dark') {
+          darkColor = '#f8fafc';
+          lightColor = '#121212';
+        } else if (currentTheme === 'glass') {
+          darkColor = '#0369a1';
+          lightColor = '#ffffff';
+        } else if (currentTheme === 'neumorphic') {
+          darkColor = '#1e293b';
+          lightColor = '#e0e5ec';
+        }
+
+        QRCode.toCanvas(canvas, RAW_URL, {
+          width: 360,
+          margin: 1,
+          errorCorrectionLevel: 'H',
+          color: { dark: darkColor, light: lightColor }
+        }, function(err) {
+          if (err) return console.error(err);
+          if (currentCenterIcon) {
+            const ctx = canvas.getContext('2d');
+            const size = canvas.width;
+            const center = size / 2;
+            const iconBgRadius = size * 0.14;
+
+            // Draw center circle backdrop
+            ctx.beginPath();
+            ctx.arc(center, center, iconBgRadius, 0, Math.PI * 2);
+            ctx.fillStyle = lightColor;
+            ctx.fill();
+            ctx.lineWidth = size * 0.015;
+            ctx.strokeStyle = darkColor;
+            ctx.stroke();
+
+            // Draw icon text / emoji
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = (size * 0.16) + 'px "DM Sans", -apple-system, sans-serif';
+            ctx.fillStyle = darkColor;
+            ctx.fillText(currentCenterIcon, center, center + (size * 0.01));
+          }
+        });
+      }
+
+      // ── THEME SWITCHER ──
+      function setTheme(themeName, el) {
+        currentTheme = themeName;
+        document.querySelectorAll('.theme-chip').forEach(c => c.classList.remove('active'));
+        if (el) el.classList.add('active');
+
+        const card = document.getElementById('standeeCard');
+        card.className = 'theme-' + themeName;
+
+        renderQR();
+      }
+
+      // ── CENTER ICON SWITCHER ──
+      function setCenterIcon(icon, el) {
+        currentCenterIcon = icon;
+        document.querySelectorAll('.icon-opt').forEach(b => b.classList.remove('active'));
+        if (el) el.classList.add('active');
+        renderQR();
+      }
+
+      // ── TEXT UPDATES ──
+      function updateCardText() {
+        const title = document.getElementById('inpTitle').value || 'Enjoyed your visit?';
+        const sub = document.getElementById('inpSub').value || 'Scan to leave a review';
+        const badge = document.getElementById('inpBadge').value.trim();
+
+        document.getElementById('cardTitle').textContent = title;
+        document.getElementById('cardSub').textContent = sub;
+
+        const badgeEl = document.getElementById('cardBadge');
+        const badgeWrap = document.getElementById('cardBadgeWrap');
+        if (badge) {
+          badgeEl.textContent = badge;
+          badgeWrap.style.display = 'block';
+        } else {
+          badgeWrap.style.display = 'none';
+        }
+      }
+
+      // ── PRINT STANDEE ──
+      function printStandee() {
+        window.print();
+      }
+
+      // ── EXPORT HD PNG ──
+      function downloadStandeePng() {
+        const card = document.getElementById('standeeCard');
+        const btn = event.currentTarget;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="ti ti-loader ti-spin"></i> Rendering HD...';
+
+        html2canvas(card, {
+          scale: 3,
+          useCORS: true,
+          backgroundColor: null,
+          logging: false
+        }).then(canvas => {
+          const a = document.createElement('a');
+          a.download = 'standee-${client.slug}-' + currentTheme + '.png';
+          a.href = canvas.toDataURL('image/png');
+          a.click();
+          btn.innerHTML = '<i class="ti ti-check"></i> Exported HD!';
+          setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+        }).catch(() => {
+          btn.innerHTML = originalText;
+          alert('Could not render image');
+        });
+      }
+
+      // ── COPY LINK ──
+      function copyLink() {
+        navigator.clipboard.writeText(RAW_URL).then(() => {
+          const btn = document.getElementById('copyBtn');
+          btn.innerHTML = '<i class="ti ti-check"></i> Copied URL!';
+          setTimeout(() => { btn.innerHTML = '<i class="ti ti-copy"></i> Copy Link'; }, 2000);
+        });
+      }
+
+      // Initial render on load
+      window.addEventListener('DOMContentLoaded', () => {
+        renderQR();
+      });
+      setTimeout(renderQR, 200);
+    </script>
+  `, extraHead);
 }
 
 // ── ANALYTICS PAGE ─────────────────────────────────────────────────
