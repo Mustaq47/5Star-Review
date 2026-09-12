@@ -24,7 +24,7 @@ router.get('/:slug/tags', async (req, res) => {
   }
 });
 
-// RAGFlow Agent Review Generator API
+// Review Generator API
 router.post('/:slug/generate', async (req, res) => {
   const { rating, tags, previousText } = req.body;
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
@@ -37,9 +37,8 @@ router.post('/:slug/generate', async (req, res) => {
         businessType: client.category,
         userText: previousText || ''
       });
-      if (agentResult && agentResult.source !== 'local') {
-        res.json({ ok: true, review: agentResult.review });
-        return;
+      if (agentResult && agentResult.source !== 'local' && agentResult.review) {
+        return res.json({ ok: true, review: agentResult.review });
       }
     }
     const review = await generateReview({
@@ -55,15 +54,21 @@ router.post('/:slug/generate', async (req, res) => {
   }
 });
 
-// RAGFlow / Gemini Next-Word Prediction API
+// RAGFlow Agent Next-Word Prediction API (Gemini + Local)
 router.post('/:slug/suggest', async (req, res) => {
   const { text, rating } = req.body;
-  const suggestion = await suggestNextWordsAsync({
-    text: text || '',
-    rating: parseInt(rating) || 5,
-    slug: req.params.slug
-  });
-  res.json({ ok: true, suggestion });
+  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  try {
+    const suggestion = await suggestNextWords({
+      text: text || '',
+      rating: parseInt(rating) || 5,
+      slug: req.params.slug,
+      client
+    });
+    res.json({ ok: true, suggestion });
+  } catch (err) {
+    res.json({ ok: true, suggestion: { primary: '', alternatives: [] } });
+  }
 });
 
 // Poll endpoint: returns the cached/best Gemini result once ready.
@@ -334,7 +339,6 @@ ${isCoolSpicy ? `
 .root.light .tab-hint{background:rgba(224,242,254,0.85);color:#0369a1;border:1px solid rgba(2,132,199,0.3)}
 .root.dark  .tab-hint{background:rgba(14,165,233,0.18);color:#bae6fd;border:1px solid rgba(56,189,248,0.3)}
 .tab-hint:hover{transform:scale(1.03)}
-
 .alts{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:6px;}
 .alt-chip{
   font-size:11px;font-family:'DM Mono',monospace;padding:3px 8px;border-radius:8px;
@@ -571,7 +575,6 @@ ${isCoolSpicy ? `
           <div class="tab-hint" id="tabHint" onclick="acceptSuggestion()">
             <span>Tab ⇥</span>
           </div>
-        <div class="alts" id="alts"></div>
         <div class="sl">Quick tags</div>
         <div class="tags" id="tags"></div>
 
@@ -922,30 +925,16 @@ function onTA() {
         const prim = typeof data.suggestion === 'string' ? data.suggestion : data.suggestion.primary;
         sugg = (prim || '').trim();
         updateMirror();
-
-        const alts = (data.suggestion && data.suggestion.alternatives) ? data.suggestion.alternatives : [];
-        const altRow = document.getElementById('alts');
-        if (altRow) {
-          altRow.innerHTML = alts.map(alt =>
-            '<span class="alt-chip" title="Click to use this sentence" onclick="acceptSuggestion(' + JSON.stringify(alt) + ')">' + esc(alt) + '</span>'
-          ).join('');
-        }
-
-        // If the server is still enhancing with Gemini, poll for the upgraded result.
-        if (data.suggestion && data.suggestion.enhancing) {
-          pollSuggestionEnhance(v, rating, 0, myGen);
-        }
       }
     })
     .catch(() => {});
   }, 100);
 }
 
-function acceptSuggestion(customText) {
-  const toAdd = typeof customText === 'string' ? customText : sugg;
-  if (toAdd) {
+function acceptSuggestion() {
+  if (sugg) {
     const ta = document.getElementById('ta');
-    const cleanAdd = toAdd.trim();
+    const cleanAdd = sugg.trim();
     const needsSpace = ta.value.length > 0 && !ta.value.endsWith(' ') && !cleanAdd.startsWith(' ');
     ta.value += (needsSpace ? ' ' : '') + cleanAdd + ' ';
     clrS();
@@ -966,8 +955,6 @@ function clrS() {
   clearTimeout(sgT);
   sugg = '';
   updateMirror();
-  const a = document.getElementById('alts');
-  if (a) a.innerHTML = '';
 }
 
 function buildPreview() {

@@ -107,7 +107,7 @@ function buildSuggestionPrompt({ text, rating = 5, businessName = '', businessTy
     'Partial review so far: "' + (text || '(empty)') + '"',
     '',
     'Write the MOST natural continuation the customer would type next:',
-    '- 1-2 short sentences, first person, human phrasing, no emojis, no hashtags, no clichés like "highly recommended".',
+    '- 1-2 short sentences, first person, human phrasing, no emojis, no clichés like "highly recommended".',
     '- The continuation must be a real sentence fragment/phrase that extends the partial text.',
     '- For low ratings (1-3), stay polite and constructive - never negative or ranting.',
     '- Echo only NEW text that follows naturally after the partial review (do not repeat the partial text).',
@@ -406,12 +406,12 @@ const TAG_SYSTEM_PROMPT = `You generate clickable "quick tag" buttons for a Goog
 Output format: JSON array of objects with "l" (label with emoji, max 25 chars) and "t" (natural review sentence, 15-25 words).
 
 Rules:
-- Valid JSON only, nothing else.
-- Tags relevant to the business type.
-- Rating 4-5: enthusiastic positive tags.
-- Rating 3: balanced tags.
-- Rating 1-2: constructive/neutral tags.
-- Each "t" must be unique and natural.`;
+-- Valid JSON only, nothing else.
+-- Tags relevant to the business type.
+-- Rating 4-5: enthusiastic positive tags.
+-- Rating 3: balanced tags.
+-- Rating 1-2: constructive/neutral tags.
+-- Each "t" must be unique and natural.`;
 
 async function generateTagsWithGemini({ rating = 5, businessName, businessType, category, limit = 8, clientId } = {}) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
