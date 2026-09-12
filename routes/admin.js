@@ -109,14 +109,33 @@ router.get('/clients/:id/edit', requireAuth, (req, res) => {
 });
 
 router.post('/clients/:id/edit', requireAuth, (req, res) => {
-  const { business_name, category, description, emoji, place_id, primary_color, primary_theme, allow_theme_toggle, tags_input, active, expiry_type, custom_expires_at } = req.body;
-  const tags = parseTags(tags_input);
-  const expires_at = calculateExpiry(expiry_type, custom_expires_at);
-  const themeMode = ['dark', 'light', 'system'].includes(primary_theme) ? primary_theme : 'dark';
-  const allowToggle = (allow_theme_toggle === 'off' || allow_theme_toggle === '0' || allow_theme_toggle === 0) ? 0 : 1;
-  db.prepare('UPDATE clients SET business_name=?,category=?,description=?,emoji=?,place_id=?,primary_color=?,primary_theme=?,allow_theme_toggle=?,tags=?,active=?,expires_at=? WHERE id=?')
-    .run(business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', themeMode, allowToggle, JSON.stringify(tags), active==='on'?1:0, expires_at, req.params.id);
-  res.redirect('/admin');
+  const { slug, business_name, category, description, emoji, place_id, primary_color, primary_theme, allow_theme_toggle, tags_input, active, expiry_type, custom_expires_at } = req.body;
+  try {
+    const cleanSlug = slug ? slug.toLowerCase().replace(/[^a-z0-9-]+/g,'').replace(/(^-|-$)/g,'') : null;
+    const tags = parseTags(tags_input);
+    const expires_at = calculateExpiry(expiry_type, custom_expires_at);
+    const themeMode = ['dark', 'light', 'system'].includes(primary_theme) ? primary_theme : 'dark';
+    const allowToggle = (allow_theme_toggle === 'off' || allow_theme_toggle === '0' || allow_theme_toggle === 0) ? 0 : 1;
+
+    if (cleanSlug) {
+      const existing = db.prepare('SELECT id FROM clients WHERE slug=? AND id!=?').get(cleanSlug, req.params.id);
+      if (existing) {
+        return res.redirect('/admin/clients/' + req.params.id + '/edit?error=' + encodeURIComponent('URL slug "' + cleanSlug + '" is already used by another business'));
+      }
+    }
+
+    if (cleanSlug) {
+      db.prepare('UPDATE clients SET slug=?, business_name=?, category=?, description=?, emoji=?, place_id=?, primary_color=?, primary_theme=?, allow_theme_toggle=?, tags=?, active=?, expires_at=? WHERE id=?')
+        .run(cleanSlug, business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', themeMode, allowToggle, JSON.stringify(tags), active==='on'?1:0, expires_at, req.params.id);
+    } else {
+      db.prepare('UPDATE clients SET business_name=?, category=?, description=?, emoji=?, place_id=?, primary_color=?, primary_theme=?, allow_theme_toggle=?, tags=?, active=?, expires_at=? WHERE id=?')
+        .run(business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', themeMode, allowToggle, JSON.stringify(tags), active==='on'?1:0, expires_at, req.params.id);
+    }
+    res.redirect('/admin');
+  } catch(e) {
+    console.error('Client edit error:', e);
+    res.redirect('/admin/clients/' + req.params.id + '/edit?error=' + encodeURIComponent(e.message));
+  }
 });
 
 router.post('/clients/:id/delete', requireAuth, (req, res) => {
@@ -541,6 +560,16 @@ function clientFormPage(client, error) {
             <input class="form-input" type="text" name="emoji" value="${esc(client?.emoji||'🏪')}" placeholder="🏪 or /images/logo.png" maxlength="255">
             <span class="form-hint">Single emoji (e.g. 🍗, ☕, 🍕) or public image path (/images/kfc-logo.png)</span>
           </div>
+
+          ${isEdit ? `
+          <div class="form-group">
+            <label class="form-label">Review Page URL Slug</label>
+            <div style="display:flex;align-items:center;background:var(--s2);border:1px solid var(--b1);border-radius:11px;overflow:hidden">
+              <span style="padding:11px 14px;color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;border-right:1px solid var(--b1)">/r/</span>
+              <input class="form-input" style="border:none;background:transparent;margin:0" type="text" name="slug" value="${esc(client.slug)}" placeholder="slug" required>
+            </div>
+            <span class="form-hint">Unique URL identifier used for review links &amp; QR standees</span>
+          </div>` : ''}
 
           <!-- ── PRIMARY THEME & VISUAL STYLING PERMISSION ── -->
           <div class="form-group" style="background:var(--s2);border:1px solid var(--b1);border-radius:14px;padding:18px">
