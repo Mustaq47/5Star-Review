@@ -348,46 +348,31 @@ function getTagsForRating(rating = 5, limit = 8) {
   return fullPool.slice(0, limit);
 }
 
+const { generateReviewWithAgent } = require('./reviewWriterAgent');
+
 /**
- * Intelligent AI Review Synthesizer (AIDA Framework + High Context Lexicon)
+ * Intelligent AI Review Synthesizer (AIDA Framework + High Context Lexicon + Review-Writer Agent)
  */
 async function generateReview({ slug, rating = 5, tags = [], previousText = '', client = null }) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
   const bizName = client ? client.business_name : 'this wonderful place';
+  const bizType = client ? client.category : 'restaurant and dessert spot';
   const domain = getBusinessDomain(client);
 
-  // 1. External LLM / RAGFlow API Engine (if configured)
-  if (OPENAI_API_KEY) {
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a real customer writing an authentic, vivid Google review. Write naturally in 2 to 3 concise, enthusiastic sentences without sounding robotic or repetitive.'
-            },
-            {
-              role: 'user',
-              content: `Write a ${r}-star review for ${bizName} mentioning these tags: ${tags.join(', ')}.`
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 120
-        })
-      });
-      const data = await response.json();
-      if (data && data.choices && data.choices[0]?.message?.content) {
-        return data.choices[0].message.content.trim();
-      }
-    } catch (e) {
-      console.warn('[AI Engine] External LLM unavailable, using contextual synthesizer:', e.message);
+  // 1. Try review-writer agent (loads prompt from .agents/agents/review-writer.md + RAGFlow/OpenAI/local)
+  try {
+    const userText = tags.length > 0 ? tags.join(', ') : (previousText || 'Great food and service');
+    const agentRes = await generateReviewWithAgent({
+      rating: r,
+      businessName: bizName,
+      businessType: bizType,
+      userText: userText
+    });
+    if (agentRes && agentRes.ok && agentRes.review) {
+      return agentRes.review;
     }
+  } catch (err) {
+    console.warn('[AI Engine] review-writer agent fallback to local synthesizer:', err.message);
   }
 
   // 2. High-Entropy Semantic Synthesizer with Deep Business Context
