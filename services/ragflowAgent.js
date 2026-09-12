@@ -1,5 +1,13 @@
 // services/ragflowAgent.js
 // Next-Gen Context-Aware AI Review & Autocomplete Intelligence Engine
+// Now powered by Google Gemini LLM with smart local fallback.
+
+const {
+  generateReviewWithGemini,
+  generateTagsWithGemini,
+  predictWithGemini,
+  isGeminiAvailable,
+} = require('./geminiAgent');
 
 const RAGFLOW_API_URL = process.env.RAGFLOW_API_URL || 'http://localhost:9380/api/v1';
 const RAGFLOW_API_KEY = process.env.RAGFLOW_API_KEY || '';
@@ -8,8 +16,8 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 
 /**
- * Multi-Domain Semantic Knowledge Base
- * Automatically blends business database metadata with rich contextual lexicons.
+ * Multi-Domain Semantic Knowledge Base (LOCAL FALLBACK)
+ * Used when Gemini is unavailable.
  */
 const DOMAIN_LEXICONS = {
   food_dessert: {
@@ -42,11 +50,9 @@ const DOMAIN_LEXICONS = {
 };
 
 /**
- * Universal Grammatical & Semantic Transition Graph
- * Enables multi-word, fluid continuous next-phrase autocomplete for any input.
+ * Local Next-Word Context Transitions (FALLBACK)
  */
 const CONTEXT_TRANSITIONS = {
-  // Starters
   'i': [
     ' really loved the food and the wonderful fairy light atmosphere here',
     ' had an extraordinary experience and thoroughly enjoyed everything we ordered',
@@ -73,8 +79,6 @@ const CONTEXT_TRANSITIONS = {
     ' staff members are polite, attentive, and provide lightning fast service',
     ' prices are very pocket-friendly and offer incredible value for money'
   ],
-
-  // Specific Entities
   'food': [
     ' is fresh, flavorful, and served piping hot with great presentation',
     ' quality exceeded all our expectations — absolutely delicious',
@@ -90,18 +94,6 @@ const CONTEXT_TRANSITIONS = {
     ' flavours are rich, smooth, and delightfully creamy with plenty of varieties',
     ' specials like Cream More and Belgian Chocolate are must-tries',
     ' was thick, creamy, and made with genuine premium ingredients'
-  ],
-  'milkshake': [
-    ' had the perfect thick consistency and rich indulgence in every sip',
-    ' varieties like KitKat and Oreo blast are thick, creamy, and delicious'
-  ],
-  'chicken': [
-    ' is seasoned to perfection, crispy on the outside and wonderfully juicy inside',
-    ' bucket and wings are crispy, flavorful, and seasoned with delicious herbs'
-  ],
-  'pizza': [
-    ' was freshly baked with a golden crispy crust and generous melted cheese',
-    ' toppings were fresh and flavorful with a mouth-watering crust'
   ],
   'service': [
     ' was lightning fast, warm, and attentive throughout our visit',
@@ -127,7 +119,7 @@ const CONTEXT_TRANSITIONS = {
 };
 
 /**
- * Intelligent Partial Prefix & Word Completion Matcher
+ * Local Prefix Dictionary (FALLBACK)
  */
 const PREFIX_DICTIONARY = {
   'chick': 'en was crispy outside and juicy inside',
@@ -179,12 +171,32 @@ function getBusinessDomain(client) {
   return DOMAIN_LEXICONS.general;
 }
 
-/**
- * Deep Context-Aware Next-Word/Next-Phrase Prediction Engine
- */
-function suggestNextWords({ text = '', rating = 5, slug = '' }) {
+
+// ═══════════════════════════════════════════════════════════════
+//  NEXT-WORD PREDICTION (Gemini → Local Fallback)
+// ═══════════════════════════════════════════════════════════════
+
+async function suggestNextWords({ text = '', rating = 5, slug = '', client = null }) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
+  const businessType = client ? (client.category || client.business_name) : '';
+
+  // Empty text: return starter suggestions
   if (!text || text.trim().length === 0) {
+    // Try Gemini for smarter starters
+    if (isGeminiAvailable()) {
+      try {
+        const result = await predictWithGemini({
+          text: '',
+          rating: r,
+          businessType: businessType || 'restaurant',
+        });
+        if (result) return result;
+      } catch (e) {
+        console.warn('[suggestNextWords] Gemini starter failed:', e.message);
+      }
+    }
+
+    // Local fallback starters
     if (r >= 4) {
       return {
         primary: 'I really loved the food, shakes, and wonderful ambience here',
@@ -205,12 +217,31 @@ function suggestNextWords({ text = '', rating = 5, slug = '' }) {
     }
   }
 
+  // ── Try Gemini first for intelligent prediction ──
+  if (isGeminiAvailable()) {
+    try {
+      const result = await predictWithGemini({
+        text,
+        rating: r,
+        businessType: businessType || 'restaurant',
+      });
+      if (result) return result;
+    } catch (e) {
+      console.warn('[suggestNextWords] Gemini predict failed:', e.message);
+    }
+  }
+
+  // ── Local fallback engine (original logic) ──
+  return localSuggestNextWords(text, r);
+}
+
+function localSuggestNextWords(text, r) {
   const raw = text.toLowerCase();
   const trimmed = raw.trim();
   const words = trimmed.split(/\s+/);
   const lastWord = words[words.length - 1];
 
-  // 1. Partial Word Match (Auto-complete word + phrase)
+  // 1. Partial Word Match
   if (lastWord.length >= 3 && PREFIX_DICTIONARY[lastWord]) {
     const completion = PREFIX_DICTIONARY[lastWord];
     return {
@@ -223,7 +254,6 @@ function suggestNextWords({ text = '', rating = 5, slug = '' }) {
     };
   }
 
-  // Prefix match on last word
   for (const [prefix, completion] of Object.entries(PREFIX_DICTIONARY)) {
     if (lastWord.length >= 3 && lastWord.startsWith(prefix)) {
       const rest = completion.replace(new RegExp(`^${lastWord.slice(prefix.length)}`, 'i'), '');
@@ -234,7 +264,7 @@ function suggestNextWords({ text = '', rating = 5, slug = '' }) {
     }
   }
 
-  // 2. Continuous Multi-Word Context Match
+  // 2. Context transition match
   for (const [trigger, continuations] of Object.entries(CONTEXT_TRANSITIONS)) {
     if (trimmed.endsWith(trigger)) {
       const chosen = continuations[Math.floor(Math.random() * continuations.length)];
@@ -245,7 +275,7 @@ function suggestNextWords({ text = '', rating = 5, slug = '' }) {
     }
   }
 
-  // 3. Trailing Punctuation Semantic Transition (Sentence completion bridge)
+  // 3. Punctuation bridge
   if (trimmed.endsWith('.') || trimmed.endsWith('!') || trimmed.endsWith(',')) {
     const bridges = [
       ' Also, the service was lightning fast and courteous.',
@@ -259,7 +289,7 @@ function suggestNextWords({ text = '', rating = 5, slug = '' }) {
     };
   }
 
-  // 4. Word-Class Context Fallback
+  // 4. Adjective map
   const ADJECTIVE_MAP = {
     'very': ' tasty, fresh, and served with a welcoming smile',
     'super': ' crispy on the outside, juicy inside, and full of flavor',
@@ -285,7 +315,7 @@ function suggestNextWords({ text = '', rating = 5, slug = '' }) {
     };
   }
 
-  // 5. General Fluent Extension
+  // 5. General fallback
   return {
     primary: 'is fresh, delicious, and worth visiting again',
     alternatives: [
@@ -296,11 +326,37 @@ function suggestNextWords({ text = '', rating = 5, slug = '' }) {
   };
 }
 
-/**
- * Intelligent Dynamic Tag Matrix
- */
-function getTagsForRating(rating = 5, limit = 8) {
+
+// ═══════════════════════════════════════════════════════════════
+//  TAG GENERATION (Gemini → Local Fallback)
+// ═══════════════════════════════════════════════════════════════
+
+async function getTagsForRating(rating = 5, limit = 8, client = null) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
+
+  // ── Try Gemini for dynamic, unique tags ──
+  if (isGeminiAvailable() && client) {
+    try {
+      const tags = await generateTagsWithGemini({
+        rating: r,
+        businessName: client.business_name,
+        businessType: client.category,
+        category: client.category,
+        limit,
+      });
+      if (tags && tags.length > 0) {
+        return tags;
+      }
+    } catch (e) {
+      console.warn('[getTagsForRating] Gemini tags failed:', e.message);
+    }
+  }
+
+  // ── Local fallback tags ──
+  return localGetTagsForRating(r, limit);
+}
+
+function localGetTagsForRating(r, limit = 8) {
   const fullPool = [
     { l: '🍦 Creamy ice creams', t: 'The ice creams are exquisitely creamy, rich, and full of delightful flavours.' },
     { l: '🥤 Thick milkshakes', t: 'The thick milkshakes are perfectly blended and an absolute treat.' },
@@ -310,7 +366,7 @@ function getTagsForRating(rating = 5, limit = 8) {
     { l: '💰 Pocket-friendly', t: 'Generous portions at very reasonable prices — outstanding value.' },
     { l: '🌟 Fairy light ambience', t: 'The night fairy lights and vibrant ambience create a wonderful cozy vibe.' },
     { l: '🍨 Cream More Delight', t: 'The Cream More special desserts and sundaes are top-notch and a must-try.' },
-    { l: '👨‍👩‍👧 Family friendly', t: 'A wonderful, clean environment for family gatherings and evening hangouts.' },
+    { l: '👨👩👧 Family friendly', t: 'A wonderful, clean environment for family gatherings and evening hangouts.' },
     { l: '💖 Highly recommend', t: 'Hands down one of the finest food and dessert spots in town — 10/10 experience!' }
   ];
 
@@ -348,18 +404,39 @@ function getTagsForRating(rating = 5, limit = 8) {
   return fullPool.slice(0, limit);
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+//  REVIEW GENERATION (Gemini → ReviewWriter Agent → Local)
+// ═══════════════════════════════════════════════════════════════
+
 const { generateReviewWithAgent } = require('./reviewWriterAgent');
 
-/**
- * Intelligent AI Review Synthesizer (AIDA Framework + High Context Lexicon + Review-Writer Agent)
- */
 async function generateReview({ slug, rating = 5, tags = [], previousText = '', client = null }) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
   const bizName = client ? client.business_name : 'this wonderful place';
   const bizType = client ? client.category : 'restaurant and dessert spot';
-  const domain = getBusinessDomain(client);
 
-  // 1. Try review-writer agent (loads prompt from .agents/agents/review-writer.md + RAGFlow/OpenAI/local)
+  // ═══ 1. TRY GEMINI FIRST (smartest, truly unique every time) ═══
+  if (isGeminiAvailable()) {
+    try {
+      const userText = tags.length > 0 ? tags.join(', ') : (previousText || '');
+      const review = await generateReviewWithGemini({
+        rating: r,
+        businessName: bizName,
+        businessType: bizType,
+        userText,
+        tags,
+      });
+      if (review && review.length > 20) {
+        console.log('[AI Engine] Review generated via Gemini ✓');
+        return review;
+      }
+    } catch (e) {
+      console.warn('[AI Engine] Gemini review failed, falling back:', e.message);
+    }
+  }
+
+  // ═══ 2. TRY REVIEW-WRITER AGENT (RAGFlow → OpenAI → local) ═══
   try {
     const userText = tags.length > 0 ? tags.join(', ') : (previousText || 'Great food and service');
     const agentRes = await generateReviewWithAgent({
@@ -369,13 +446,16 @@ async function generateReview({ slug, rating = 5, tags = [], previousText = '', 
       userText: userText
     });
     if (agentRes && agentRes.ok && agentRes.review) {
+      console.log('[AI Engine] Review generated via', agentRes.source, '✓');
       return agentRes.review;
     }
   } catch (err) {
     console.warn('[AI Engine] review-writer agent fallback to local synthesizer:', err.message);
   }
 
-  // 2. High-Entropy Semantic Synthesizer with Deep Business Context
+  // ═══ 3. LOCAL SYNTHESIZER (last resort) ═══
+  const domain = getBusinessDomain(client);
+
   const INTROS_5 = [
     `Had a truly memorable visit to ${bizName} recently!`,
     `Without a doubt, one of our absolute favourite spots in the area.`,
@@ -405,7 +485,7 @@ async function generateReview({ slug, rating = 5, tags = [], previousText = '', 
   const outro = r >= 4 ? OUTROS_5[Math.floor(Math.random() * OUTROS_5.length)] : OUTROS_LOW[Math.floor(Math.random() * OUTROS_LOW.length)];
 
   let sentences = [];
-  const tagPool = getTagsForRating(r, 12);
+  const tagPool = localGetTagsForRating(r, 12);
 
   if (tags.length > 0) {
     tags.forEach(selectedTag => {
@@ -418,14 +498,12 @@ async function generateReview({ slug, rating = 5, tags = [], previousText = '', 
       }
     });
   } else {
-    // Generate contextually from domain dishes & strengths
     const sampleDish = domain.dishes[Math.floor(Math.random() * domain.dishes.length)];
     const sampleQuality = domain.qualities[Math.floor(Math.random() * domain.qualities.length)];
     sentences.push(`The ${sampleDish.toLowerCase()} was ${sampleQuality} and exceeded expectations.`);
     sentences.push(`The staff were courteous and the ambience made for a very relaxing visit.`);
   }
 
-  // Clean deduplication
   const uniqueSentences = Array.from(new Set(sentences));
   const connectors = [' ', ' Moreover, ', ' Plus, ', ' In addition, ', ' Also, '];
 
@@ -440,6 +518,7 @@ async function generateReview({ slug, rating = 5, tags = [], previousText = '', 
 
   return `${intro} ${body} ${outro}`.replace(/\s+/g, ' ').trim();
 }
+
 
 module.exports = {
   getTagsForRating,

@@ -56,6 +56,24 @@ db.exec(`
     clicked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(client_id) REFERENCES clients(id)
   );
+
+  -- ═══════════════════════════════════════════════════════════════
+  -- AI REVIEW MEMORY SYSTEM
+  -- Stores generated reviews with embeddings for semantic similarity
+  -- ═══════════════════════════════════════════════════════════════
+  CREATE TABLE IF NOT EXISTS review_memory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    rating INTEGER NOT NULL,
+    tags TEXT DEFAULT '[]',
+    review_text TEXT NOT NULL,
+    embedding TEXT NOT NULL,  -- JSON array of 768-dim Gemini embeddings
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(client_id) REFERENCES clients(id)
+  );
+
+  -- Index for fast similarity searches
+  CREATE INDEX IF NOT EXISTS idx_review_memory_client ON review_memory(client_id);
 `);
 
 // Auto-seed default admin if database is new

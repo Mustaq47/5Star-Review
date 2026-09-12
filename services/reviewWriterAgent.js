@@ -14,6 +14,9 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_BASE = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
+// Gemini Agent import
+const { generateReviewWithGemini, isGeminiAvailable } = require('./geminiAgent');
+
 function loadAgentPrompt() {
   try {
     const raw = fs.readFileSync(AGENT_FILE, 'utf8');
@@ -145,7 +148,25 @@ async function generateReviewWithAgent(inputs) {
     }
   }
 
-  // 2. OpenAI-compatible chat completions.
+  // 2. Gemini LLM agent (free, high quality).
+  if (isGeminiAvailable()) {
+    try {
+      const review = await generateReviewWithGemini({
+        rating,
+        businessName: inputs.businessName,
+        businessType: inputs.businessType,
+        userText: inputs.userText,
+        tags: inputs.tags || [],
+      });
+      if (review && review.length > 20) {
+        return { ok: true, source: 'gemini', review };
+      }
+    } catch (e) {
+      console.warn('[review-writer] Gemini unavailable:', e.message);
+    }
+  }
+
+  // 3. OpenAI-compatible chat completions.
   if (OPENAI_API_KEY) {
     try {
       const review = await callChat(OPENAI_BASE, OPENAI_API_KEY, OPENAI_MODEL, buildMessages(inputs));
@@ -155,7 +176,7 @@ async function generateReviewWithAgent(inputs) {
     }
   }
 
-  // 3. Local positive-only fallback generator.
+  // 4. Local positive-only fallback generator.
   return { ok: true, source: 'local', review: localGenerate(inputs) };
 }
 
