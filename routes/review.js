@@ -740,70 +740,45 @@ function updateButtonProgression() {
   }
 }
 
+const tagSentenceMap = new Map();
+
 function toggleTag(label) {
-  if (activeTags.has(label)) {
-    activeTags.delete(label);
-  } else {
-    activeTags.add(label);
-  }
-  renderTags();
-  updateButtonProgression();
-
-  if (activeTags.size === 0) {
-    clearTimeout(genTimer);
-    const ta = document.getElementById('ta');
-    if (ta) {
-      ta.value = '';
-      ta.placeholder = 'Tap quick tags below or type your experience...';
-    }
-    clrS();
-    updateMirror();
-    updateButtonProgression();
-    return;
-  }
-
-  triggerAgentGeneration();
-}
-
-let genTimer = null;
-function triggerAgentGeneration() {
-  clearTimeout(genTimer);
   const ta = document.getElementById('ta');
-  if (!ta) return;
+  const tagObj = CURRENT_TAGS.find(t => t.l === label) || { l: label, t: label };
+  const sentence = (tagObj.t || tagObj.l || label).trim();
 
-  if (activeTags.size === 0) {
-    ta.value = '';
-    ta.placeholder = 'Tap quick tags below or type your experience...';
-    clrS();
-    updateMirror();
-    updateButtonProgression();
-    return;
+  if (activeTags.has(label)) {
+    // Deselect tag: remove this tag's sentence from textarea if it was inserted
+    activeTags.delete(label);
+    if (ta && tagSentenceMap.has(label)) {
+      const sentToRemove = tagSentenceMap.get(label);
+      let cur = ta.value;
+      cur = cur.replace(sentToRemove, '').replace(/\s{2,}/g, ' ').trim();
+      ta.value = cur;
+      tagSentenceMap.delete(label);
+    }
+  } else {
+    // Select tag: add to activeTags and intelligently append sentence to existing review text
+    activeTags.add(label);
+    tagSentenceMap.set(label, sentence);
+    if (ta) {
+      const cur = ta.value.trim();
+      if (!cur) {
+        ta.value = sentence;
+      } else {
+        if (!cur.includes(sentence)) {
+          const needsDot = !cur.endsWith('.') && !cur.endsWith('!') && !cur.endsWith('?') && !cur.endsWith(',');
+          ta.value = cur + (needsDot ? '. ' : ' ') + sentence;
+        }
+      }
+    }
   }
 
-  ta.placeholder = 'AI is generating your unique review...';
-
-  genTimer = setTimeout(() => {
-    fetch('/r/' + SLUG + '/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        rating: rating,
-        tags: Array.from(activeTags),
-        previousText: ta.value
-      })
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok && data.review) {
-        ta.value = data.review;
-        clrS();
-        updateMirror();
-        updateButtonProgression();
-        toast('✨ Generated unique review');
-      }
-    })
-    .catch(() => {});
-  }, 200);
+  renderTags();
+  clrS();
+  updateMirror();
+  syncScroll();
+  updateButtonProgression();
 }
 
 function regenerateReview() {

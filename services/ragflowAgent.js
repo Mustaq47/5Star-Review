@@ -681,21 +681,67 @@ function localSuggestNextWords(text, r = 5) {
 }
 
 
-// ═══════════════════════════════════════════════════════════════
-//  TAG GENERATION (Gemini → Local Fallback)
-// ═══════════════════════════════════════════════════════════════
+async function generateTagsWithOpenAI({ rating = 5, businessName = '', businessType = '', category = '', limit = 8 } = {}) {
+  const openAiKey = process.env.OPENAI_API_KEY;
+  if (!openAiKey) return null;
+  const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+  const openAiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
+  const prompt = `Generate ${limit} clickable quick review tags for a Google review writing assistant:
+- Business: ${businessName || 'Local Business'}
+- Category: ${businessType || category || 'Restaurant'}
+- Rating: ${rating} out of 5 stars
+
+Output ONLY a valid JSON array of objects with:
+- "l": Short label with appropriate emoji (max 25 chars)
+- "t": Natural review sentence (15-25 words) matching the ${rating}-star tone.
+Example: [{"l":"🍕 Cheesy pizza","t":"The pizzas are freshly baked with a golden crispy crust and loaded with cheese."}]`;
+
+  try {
+    const resp = await fetch(openAiBase.replace(/\/$/, '') + '/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + openAiKey
+      },
+      body: JSON.stringify({
+        model: openAiModel,
+        messages: [
+          { role: 'system', content: 'You are an AI that generates structured JSON array tags.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.8,
+        max_tokens: 600
+      })
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const raw = data.choices?.[0]?.message?.content || '';
+    const jsonStr = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const parsed = JSON.parse(jsonStr);
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].l && parsed[0].t) {
+      console.log('[getTagsForRating] Dynamic tags generated via OpenAI AI Brain ✓');
+      return parsed.slice(0, limit);
+    }
+  } catch (e) {
+    console.warn('[getTagsForRating] OpenAI tag generation failed:', e.message);
+  }
+  return null;
+}
 
 async function getTagsForRating(rating = 5, limit = 8, client = null) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
+  const bizName = client ? client.business_name : '';
+  const bizType = client ? (client.category || client.description) : '';
 
-  // ── Try Gemini for dynamic, unique tags ──
+  // 1. Try Gemini AI Brain
   if (isGeminiAvailable() && client) {
     try {
       const tags = await generateTagsWithGemini({
         rating: r,
-        businessName: client.business_name,
-        businessType: client.category,
-        category: client.category,
+        businessName: bizName,
+        businessType: bizType,
+        category: bizType,
         limit,
       });
       if (tags && tags.length > 0) {
@@ -706,7 +752,23 @@ async function getTagsForRating(rating = 5, limit = 8, client = null) {
     }
   }
 
-  // ── Local fallback tags ──
+  // 2. Try OpenAI AI Brain
+  try {
+    const openAiTags = await generateTagsWithOpenAI({
+      rating: r,
+      businessName: bizName,
+      businessType: bizType,
+      category: bizType,
+      limit
+    });
+    if (openAiTags && openAiTags.length > 0) {
+      return openAiTags;
+    }
+  } catch (e) {
+    console.warn('[getTagsForRating] OpenAI tags fallback:', e.message);
+  }
+
+  // 3. Local fallback tags
   return localGetTagsForRating(r, limit);
 }
 
