@@ -3,19 +3,24 @@ const db = require('../db/setup');
 const { getTagsForRating, generateReview, suggestNextWords } = require('../services/ragflowAgent');
 const router = express.Router();
 
-router.get('/:slug', (req, res) => {
+router.get('/:slug', async (req, res) => {
   const client = db.prepare('SELECT * FROM clients WHERE slug=? AND active=1').get(req.params.slug);
   if (!client) return res.status(404).send(notFound());
   db.prepare('INSERT INTO pageviews (client_id) VALUES (?)').run(client.id);
-  const initialTags = getTagsForRating(5, 8);
+  const initialTags = await getTagsForRating(5, 8, client);
   res.send(reviewPage(client, initialTags));
 });
 
-// Dynamic Rating-based Tags API
-router.get('/:slug/tags', (req, res) => {
+// Dynamic Rating-based Tags API (now Gemini-powered)
+router.get('/:slug/tags', async (req, res) => {
   const rating = parseInt(req.query.rating) || 5;
-  const tags = getTagsForRating(rating, 8);
-  res.json({ ok: true, tags });
+  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  try {
+    const tags = await getTagsForRating(rating, 8, client);
+    res.json({ ok: true, tags });
+  } catch (err) {
+    res.json({ ok: true, tags: getTagsForRating(rating, 8) });
+  }
 });
 
 // RAGFlow Agent Review Generator API (Zero repetition with huge context)
@@ -36,17 +41,21 @@ router.post('/:slug/generate', async (req, res) => {
   }
 });
 
-// RAGFlow Agent Next-Word Prediction API
-router.post('/:slug/suggest', (req, res) => {
+// RAGFlow Agent Next-Word Prediction API (now Gemini-powered)
+router.post('/:slug/suggest', async (req, res) => {
   const { text, rating } = req.body;
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
-  const suggestion = suggestNextWords({
-    text: text || '',
-    rating: parseInt(rating) || 5,
-    slug: req.params.slug,
-    client
-  });
-  res.json({ ok: true, suggestion });
+  try {
+    const suggestion = await suggestNextWords({
+      text: text || '',
+      rating: parseInt(rating) || 5,
+      slug: req.params.slug,
+      client
+    });
+    res.json({ ok: true, suggestion });
+  } catch (err) {
+    res.json({ ok: true, suggestion: { primary: '', alternatives: [] } });
+  }
 });
 
 router.post('/:slug/click', (req, res) => {
@@ -215,14 +224,10 @@ ${isCoolSpicy ? `
 .root.dark  .sb{background:rgba(14,165,233,0.06);border-color:rgba(56,189,248,0.16)}
 .root.light .sb.lit{background:rgba(255,255,255,0.7);border-color:rgba(186,230,253,0.95);transform:none;box-shadow:none}
 .root.dark  .sb.lit{background:rgba(14,165,233,0.08);border-color:rgba(56,189,248,0.25);transform:none;box-shadow:none}
-.sg{font-size:24px;line-height:1;color:rgba(148,163,184,0.35);transition:color .25s ease, transform .25s cubic-bezier(.34,1.5,.64,1), filter .28s ease;position:relative;z-index:1}
+.sg{font-size:24px;line-height:1;color:rgba(148,163,184,0.35);transition:color .25s ease, transform .25s cubic-bezier(.34,1.5,.64,1), filter .25s ease;position:relative;z-index:1}
 .root.dark .sg{color:rgba(100,116,139,0.35)}
-.sb.lit .sg{
-  color:#f59e0b !important;
-  transform:scale(1.2);
-  filter:drop-shadow(0 0 5px rgba(245,158,11,0.8)) drop-shadow(0 0 12px rgba(251,191,36,0.5)) drop-shadow(0 2px 4px rgba(217,119,6,0.4));
-}
-.sb.lit.pop-wave .sg{animation:starPopWave .34s cubic-bezier(.34,1.56,.64,1) both}
+.sb.lit .sg{color:#f59e0b !important;transform:scale(1.2);filter:drop-shadow(0 2px 7px rgba(245,158,11,0.55))}
+.sb.lit.pop-wave .sg{animation:starPopWave .32s cubic-bezier(.34,1.56,.64,1) both}
 @keyframes starPopWave{
   0%{transform:scale(0.8);opacity:0.7}
   55%{transform:scale(1.34)}
@@ -390,9 +395,9 @@ ${isCoolSpicy ? `
 }
 .btn i{font-size:17px}
 
-.bp{background:linear-gradient(135deg,#0284c7 0%,#0369a1 100%);border-color:rgba(255,255,255,0.2);color:#fff;box-shadow:0 4px 22px rgba(2,132,199,0.3),inset 0 1px 0 rgba(255,255,255,0.2)}
+.bp{background:linear-gradient(135deg,#bd8f7d 0%,#a87967 100%);border-color:rgba(255,255,255,0.22);color:#fff;box-shadow:0 4px 22px rgba(189,143,125,0.35),inset 0 1px 0 rgba(255,255,255,0.25)}
 .root.dark .bp{opacity:0.95}
-.bp:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.bp:hover{filter:brightness(1.08);transform:translateY(-1px)}
 .bp:active{transform:scale(0.98)}
 
 .root.light .bs{background:rgba(255,255,255,0.65);border-color:rgba(186,230,253,0.9);color:#0369a1}
@@ -685,7 +690,7 @@ function triggerAgentGeneration() {
     return;
   }
 
-  ta.placeholder = 'RAGFlow AI is generating your unique review...';
+  ta.placeholder = 'AI is generating your unique review...';
 
   genTimer = setTimeout(() => {
     fetch('/r/' + SLUG + '/generate', {
