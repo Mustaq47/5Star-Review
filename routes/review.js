@@ -24,23 +24,12 @@ router.get('/:slug/tags', async (req, res) => {
   }
 });
 
-// Review Generator API
+// Review Generator API (Hierarchy: AI [Gemini, OpenAI] → Review-Writer Agent → Local Synthesizer)
 router.post('/:slug/generate', async (req, res) => {
   const { rating, tags, previousText } = req.body;
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
   const ratingNum = parseInt(rating) || 5;
   try {
-    if (client) {
-      const agentResult = await generateReviewWithAgent({
-        rating: String(ratingNum),
-        businessName: client.business_name,
-        businessType: client.category,
-        userText: previousText || ''
-      });
-      if (agentResult && agentResult.source !== 'local' && agentResult.review) {
-        return res.json({ ok: true, review: agentResult.review });
-      }
-    }
     const review = await generateReview({
       slug: req.params.slug,
       rating: ratingNum,
