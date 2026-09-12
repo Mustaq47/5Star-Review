@@ -1,7 +1,7 @@
 // services/reviewWriterAgent.js
 // Integrated review-writer agent service.
 // Loads agent prompt from .agents/agents/review-writer.md and calls an
-// OpenAI-compatible LLM (RAGFlow or OpenAI)with local positive-only fallback.
+// LLM (Gemini, NVIDIA NIM, or RAGFlow) with local positive-only fallback.
 
 const fs = require('fs');
 const path = require('path');
@@ -10,9 +10,9 @@ const AGENT_FILE = path.join(__dirname, '..', '.agents', 'agents', 'review-write
 const RAGFLOW_API_URL = process.env.RAGFLOW_API_URL || 'http://localhost:9380/api/v1';
 const RAGFLOW_API_KEY = process.env.RAGFLOW_API_KEY || '';
 const RAGFLOW_AGENT_ID = process.env.RAGFLOW_AGENT_ID || '';
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
-const OPENAI_BASE = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
+const NVIDIA_BASE = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
+const NVIDIA_MODEL = process.env.NVIDIA_MODEL || 'deepseek-ai/deepseek-v4-flash-0731';
 // Gemini Agent import
 const { generateReviewWithGemini, isGeminiAvailable } = require('./geminiAgent');
 
@@ -87,23 +87,25 @@ function localGenerate(opts) {
 }
 
 
-// OpenAI-compatible chat completions caller.
+// Chat completions caller for NVIDIA NIM / OpenAI-compatible APIs.
 async function callChat(apiBase, apiKey, model, messages) {
   const url = apiBase.replace(/\/$/, '') + '/chat/completions';
   const resp = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey
+      'Authorization': 'Bearer ' + apiKey,
+      'Accept': 'application/json'
     },
-    body: JSON.stringify({ model, messages, temperature: 0.9, max_tokens: 180 })
+    body: JSON.stringify({ model, messages, temperature: 0.8, max_tokens: 350 })
   });
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '');
     throw new Error('LLM API ' + resp.status + ': ' + errText.slice(0, 200));
   }
   const data = await resp.json();
-  const content = data.choices?.[0]?.message?.content || '';
+  const choice = data.choices?.[0]?.message;
+  const content = choice?.content || choice?.reasoning_content || '';
   return String(content).trim();
 }
 
@@ -143,19 +145,19 @@ async function generateReviewWithAgent(inputs) {
     }
   }
 
-  // 2. OpenAI chat completions (gpt-4o-mini / gpt-4o).
-  const openAiKey = process.env.OPENAI_API_KEY || OPENAI_API_KEY;
-  const openAiBase = process.env.OPENAI_BASE_URL || OPENAI_BASE;
-  const openAiModel = process.env.OPENAI_MODEL || OPENAI_MODEL;
-  if (openAiKey) {
+  // 2. NVIDIA NIM chat completions.
+  const nvidiaKey = process.env.NVIDIA_API_KEY || NVIDIA_API_KEY;
+  const nvidiaBase = process.env.NVIDIA_BASE_URL || NVIDIA_BASE;
+  const nvidiaModel = process.env.NVIDIA_MODEL || NVIDIA_MODEL;
+  if (nvidiaKey) {
     try {
-      const review = await callChat(openAiBase, openAiKey, openAiModel, buildMessages(inputs));
+      const review = await callChat(nvidiaBase, nvidiaKey, nvidiaModel, buildMessages(inputs));
       if (review && review.length > 15) {
-        console.log('[review-writer] Review generated via OpenAI (' + openAiModel + ') ✓');
-        return { ok: true, source: 'openai', review };
+        console.log('[review-writer] Review generated via NVIDIA (' + nvidiaModel + ') ✓');
+        return { ok: true, source: 'nvidia', review };
       }
     } catch (e) {
-      console.warn('[review-writer] OpenAI unavailable:', e.message);
+      console.warn('[review-writer] NVIDIA unavailable:', e.message);
     }
   }
 

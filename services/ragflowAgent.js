@@ -681,11 +681,11 @@ function localSuggestNextWords(text, r = 5) {
 }
 
 
-async function generateTagsWithOpenAI({ rating = 5, businessName = '', businessType = '', category = '', limit = 8 } = {}) {
-  const openAiKey = process.env.OPENAI_API_KEY;
-  if (!openAiKey) return null;
-  const openAiBase = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-  const openAiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+async function generateTagsWithNvidia({ rating = 5, businessName = '', businessType = '', category = '', limit = 8 } = {}) {
+  const nvidiaKey = process.env.NVIDIA_API_KEY;
+  if (!nvidiaKey) return null;
+  const nvidiaBase = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
+  const nvidiaModel = process.env.NVIDIA_MODEL || 'deepseek-ai/deepseek-v4-flash-0731';
 
   const prompt = `Generate ${limit} clickable quick review tags for a Google review writing assistant:
 - Business: ${businessName || 'Local Business'}
@@ -698,14 +698,15 @@ Output ONLY a valid JSON array of objects with:
 Example: [{"l":"🍕 Cheesy pizza","t":"The pizzas are freshly baked with a golden crispy crust and loaded with cheese."}]`;
 
   try {
-    const resp = await fetch(openAiBase.replace(/\/$/, '') + '/chat/completions', {
+    const resp = await fetch(nvidiaBase.replace(/\/$/, '') + '/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + openAiKey
+        'Authorization': 'Bearer ' + nvidiaKey,
+        'Accept': 'application/json'
       },
       body: JSON.stringify({
-        model: openAiModel,
+        model: nvidiaModel,
         messages: [
           { role: 'system', content: 'You are an AI that generates structured JSON array tags.' },
           { role: 'user', content: prompt }
@@ -716,15 +717,16 @@ Example: [{"l":"🍕 Cheesy pizza","t":"The pizzas are freshly baked with a gold
     });
     if (!resp.ok) return null;
     const data = await resp.json();
-    const raw = data.choices?.[0]?.message?.content || '';
+    const choice = data.choices?.[0]?.message;
+    const raw = choice?.content || choice?.reasoning_content || '';
     const jsonStr = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
     const parsed = JSON.parse(jsonStr);
     if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].l && parsed[0].t) {
-      console.log('[getTagsForRating] Dynamic tags generated via OpenAI AI Brain ✓');
+      console.log('[getTagsForRating] Dynamic tags generated via NVIDIA AI Brain ✓');
       return parsed.slice(0, limit);
     }
   } catch (e) {
-    console.warn('[getTagsForRating] OpenAI tag generation failed:', e.message);
+    console.warn('[getTagsForRating] NVIDIA tag generation failed:', e.message);
   }
   return null;
 }
@@ -752,20 +754,20 @@ async function getTagsForRating(rating = 5, limit = 8, client = null) {
     }
   }
 
-  // 2. Try OpenAI AI Brain
+  // 2. Try NVIDIA NIM AI Brain
   try {
-    const openAiTags = await generateTagsWithOpenAI({
+    const nvidiaTags = await generateTagsWithNvidia({
       rating: r,
       businessName: bizName,
       businessType: bizType,
       category: bizType,
       limit
     });
-    if (openAiTags && openAiTags.length > 0) {
-      return openAiTags;
+    if (nvidiaTags && nvidiaTags.length > 0) {
+      return nvidiaTags;
     }
   } catch (e) {
-    console.warn('[getTagsForRating] OpenAI tags fallback:', e.message);
+    console.warn('[getTagsForRating] NVIDIA tags fallback:', e.message);
   }
 
   // 3. Local fallback tags
