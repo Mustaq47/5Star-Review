@@ -104,10 +104,11 @@ function reviewPage(client, tags) {
     ? '<span class="c-cool">COOL</span> <span class="c-and">&amp;</span> <span class="c-spicy">SPICY</span>'
     : esc(client.business_name);
 
-  const isImageLogo = client.emoji && (client.emoji.startsWith('/') || client.emoji.startsWith('http') || client.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i));
+  const hasLogo = Boolean(client.emoji && client.emoji.trim() !== '' && client.emoji !== 'none' && client.emoji !== 'null');
+  const isImageLogo = hasLogo && (client.emoji.startsWith('/') || client.emoji.startsWith('http') || client.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i));
   const logoHtml = isImageLogo
     ? `<img src="${esc(client.emoji)}" alt="${esc(client.business_name)} Logo">`
-    : esc(client.emoji || '🏪');
+    : (hasLogo ? esc(client.emoji) : '');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -577,8 +578,8 @@ ${isKfc ? `
 
       <!-- HEADER -->
       <div class="hdr">
-        <div class="biz-logo">${logoHtml}</div>
-        <div>
+        ${hasLogo ? `<div class="biz-logo">${logoHtml}</div>` : ''}
+        <div style="flex:1">
           <div class="biz-name">${bizNameHtml}</div>
           <div class="biz-cat">${esc(client.category)}</div>
           <div class="biz-desc">${esc(client.description)}</div>
