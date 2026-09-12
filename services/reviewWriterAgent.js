@@ -125,29 +125,7 @@ async function generateReviewWithAgent(inputs) {
   inputs = inputs || {};
   const rating = ratingOf(inputs.rating);
 
-  // 1. Prefer RAGFlow agent endpoint (same env vars as ragflowAgent.js).
-  if (RAGFLOW_API_KEY && RAGFLOW_AGENT_ID) {
-    try {
-      const msgs = buildMessages(inputs);
-      const question = msgs.map(m => m.role + ': ' + m.content).join('\n\n');
-      const resp = await fetch(RAGFLOW_API_URL.replace(/\/$/, '') + '/agents/' + RAGFLOW_AGENT_ID + '/sessions', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + RAGFLOW_API_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ question })
-      });
-      const data = await resp.json();
-      if (data && data.data && data.data.answer) {
-        return { ok: true, source: 'ragflow', review: String(data.data.answer).trim() };
-      }
-    } catch (e) {
-      console.warn('[review-writer] RAGFlow unavailable:', e.message);
-    }
-  }
-
-  // 2. Gemini LLM agent (free, high quality).
+  // 1. Gemini LLM agent.
   if (isGeminiAvailable()) {
     try {
       const review = await generateReviewWithGemini({
@@ -165,13 +143,44 @@ async function generateReviewWithAgent(inputs) {
     }
   }
 
-  // 3. OpenAI-compatible chat completions.
-  if (OPENAI_API_KEY) {
+  // 2. OpenAI chat completions (gpt-4o-mini / gpt-4o).
+  const openAiKey = process.env.OPENAI_API_KEY || OPENAI_API_KEY;
+  const openAiBase = process.env.OPENAI_BASE_URL || OPENAI_BASE;
+  const openAiModel = process.env.OPENAI_MODEL || OPENAI_MODEL;
+  if (openAiKey) {
     try {
-      const review = await callChat(OPENAI_BASE, OPENAI_API_KEY, OPENAI_MODEL, buildMessages(inputs));
-      if (review) return { ok: true, source: 'openai', review };
+      const review = await callChat(openAiBase, openAiKey, openAiModel, buildMessages(inputs));
+      if (review && review.length > 15) {
+        console.log('[review-writer] Review generated via OpenAI (' + openAiModel + ') ✓');
+        return { ok: true, source: 'openai', review };
+      }
     } catch (e) {
       console.warn('[review-writer] OpenAI unavailable:', e.message);
+    }
+  }
+
+  // 3. RAGFlow agent endpoint.
+  const ragflowKey = process.env.RAGFLOW_API_KEY || RAGFLOW_API_KEY;
+  const ragflowAgentId = process.env.RAGFLOW_AGENT_ID || RAGFLOW_AGENT_ID;
+  const ragflowUrl = process.env.RAGFLOW_API_URL || RAGFLOW_API_URL;
+  if (ragflowKey && ragflowAgentId) {
+    try {
+      const msgs = buildMessages(inputs);
+      const question = msgs.map(m => m.role + ': ' + m.content).join('\n\n');
+      const resp = await fetch(ragflowUrl.replace(/\/$/, '') + '/agents/' + ragflowAgentId + '/sessions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + ragflowKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ question })
+      });
+      const data = await resp.json();
+      if (data && data.data && data.data.answer) {
+        return { ok: true, source: 'ragflow', review: String(data.data.answer).trim() };
+      }
+    } catch (e) {
+      console.warn('[review-writer] RAGFlow unavailable:', e.message);
     }
   }
 
