@@ -84,10 +84,11 @@ const STAR_TONES = {
   1: 'fair-minded, forward-looking, polite'
 };
 
-function buildSuggestionPrompt({ text, rating = 5, businessName = '', businessType = '', tagLabels = [] }) {
+function buildSuggestionPrompt({ text, rating = 5, businessName = '', businessType = '', tagLabels = [], brainContext = '' }) {
   const tone = STAR_TONES[rating] || STAR_TONES[5];
   const biz = [businessName, businessType].filter(Boolean).join(' - ');
   const tags = (tagLabels && tagLabels.length) ? tagLabels.join(', ') : 'no specific tags';
+  const brain = brainContext ? '\n\nVoice bank (study rhythm, never copy):\n' + brainContext : '';
   return [
     'You are an expert assistant that helps a customer finish writing a short Google review.',
     '',
@@ -103,16 +104,17 @@ function buildSuggestionPrompt({ text, rating = 5, businessName = '', businessTy
     '- Echo only NEW text that follows naturally after the partial review (do not repeat the partial text).',
     '',
     'Respond ONLY with valid JSON in this exact shape (no markdown fences, no commentary):',
-    '{"primary": "<best single continuation>", "alternatives": ["<alt 1>", "<alt 2>", "<alt 3>"]}'
+    '{"primary": "<best single continuation>", "alternatives": ["<alt 1>", "<alt 2>", "<alt 3>"]}',
+    brain
   ].filter(Boolean).join('\n');
 }
 
-async function suggestWithGemini({ text, rating = 5, businessName = '', businessType = '', tagLabels = [] }) {
+async function suggestWithGemini({ text, rating = 5, businessName = '', businessType = '', tagLabels = [], brainContext = '' }) {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY not configured');
   }
 
-  const prompt = buildSuggestionPrompt({ text, rating, businessName, businessType, tagLabels });
+  const prompt = buildSuggestionPrompt({ text, rating, businessName, businessType, tagLabels, brainContext });
   const url = `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
   const res = await fetchWithTimeout(url, {

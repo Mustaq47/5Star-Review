@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "setup": "node seed.js",
-    "dev": "node seed.js && node server.js"
+    "dev": "node seed.js && node server.js",
+    "brain:seed": "node scripts/build-seed.js",
+    "brain": "node scripts/build-brain.js",
+    "brain:check": "node scripts/build-brain.js --check"
   },
   "keywords": [
     "review",

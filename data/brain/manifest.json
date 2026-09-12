@@ -1,0 +1,20 @@
+{
+  "name": "review-brain",
+  "version": 1,
+  "description": "Scalable positive Google-review knowledge bank for the review-writer agent.",
+  "budgetBytes": 524288000,
+  "seed": {
+    "path": "seed/",
+    "formats": [".jsonl"]
+  },
+  "shards": {
+    "path": "shards/",
+    "prefix": "shard-",
+    "ext": ".jsonl",
+    "recordsPerShard": 100
+  },
+  "index": {
+    "path": "shards/index.json",
+    "loaded": false
+  }
+}

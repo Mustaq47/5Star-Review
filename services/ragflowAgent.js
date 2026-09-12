@@ -3,6 +3,7 @@
 
 const RAGFLOW_API_URL = process.env.RAGFLOW_API_URL || 'http://localhost:9380/api/v1';
 const { suggestWithGemini, getSuggestedSuggestion, isEnhancing } = require('./geminiAgent');
+const { buildBrainContext } = require('./reviewBrain');
 
 const RAGFLOW_API_KEY = process.env.RAGFLOW_API_KEY || '';
 const RAGFLOW_AGENT_ID = process.env.RAGFLOW_AGENT_ID || '';
@@ -369,12 +370,14 @@ async function suggestNextWordsAsync({ text = '', rating = 5, slug = '' }) {
     return { source: 'static', enhancing: false, ...suggestNextWords({ text: '', rating, slug }) };
   }
 
+  const businessType = (BUSINESS_KNOWLEDGE[slug] || {}).categories ? BUSINESS_KNOWLEDGE[slug].categories.join(', ') : '';
   const input = {
     text: text.trim(),
     rating: parseInt(rating) || 5,
     businessName: (BUSINESS_KNOWLEDGE[slug] || {}).name || '',
-    businessType: (BUSINESS_KNOWLEDGE[slug] || {}).categories ? BUSINESS_KNOWLEDGE[slug].categories.join(', ') : '',
-    tagLabels: (getTagsForRating(rating, 8) || []).map(t => (typeof t === 'string' ? t : t.label || t.l))
+    businessType,
+    tagLabels: (getTagsForRating(rating, 8) || []).map(t => (typeof t === 'string' ? t : t.label || t.l)),
+    brainContext: buildBrainContext({ rating: parseInt(rating) || 5, businessType, userText: text }).context
   };
 
   const base = suggestNextWords({ text, rating, slug });

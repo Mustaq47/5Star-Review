@@ -1,10 +1,14 @@
 // services/reviewWriterAgent.js
 // Integrated review-writer agent service.
 // Loads agent prompt from .agents/agents/review-writer.md and calls an
-// OpenAI-compatible LLM (RAGFlow or OpenAI)with local positive-only fallback.
+// OpenAI-compatible LLM (RAGFlow or OpenAI) with local positive-only fallback.
+// When the review brain (data/brain/) is present, its retrieved exemplars and
+// style guidance are injected into the prompt so the LLM writes in a human,
+// rating-aware voice without needing a huge static block in the prompt.
 
 const fs = require('fs');
 const path = require('path');
+const { buildBrainContext } = require('./reviewBrain');
 
 const AGENT_FILE = path.join(__dirname, '..', '.agents', 'agents', 'review-writer.md');
 const RAGFLOW_API_URL = process.env.RAGFLOW_API_URL || 'http://localhost:9380/api/v1';
@@ -114,7 +118,79 @@ function buildMessages(inputs) {
     + '\nBusiness type: ' + (inputs.businessType || '(not provided)')
     + '\nUser experience notes: ' + (inputs.userText || '(no notes provided)')
     + '\n\nWrite the review now (2-4 sentences, positive, no emojis, no hashtags).';
-  return [ { role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: prompt } ];
+  const msgs = [ { role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: prompt } ];
+
+  // Inject the review brain context (retrieved exemplars + type guidance).
+  const brain = buildBrainContext({
+    rating: r,
+    businessType: inputs.businessType,
+    userText: inputs.userText
+  });
+  if (brain.context) {
+    msgs.unshift({
+      role: 'system',
+      content: 'You are writing a review. Below is a compact slice of a large review'
+        + ' knowledge bank. Study its voice and rating-fit, then write according to'
+        + ' the task.\n\n' + brain.context
+    });
+  }
+  return msgs;
+}
+
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+const GEMINI_BASE = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
+
+/** Call Gemini generateContent in JSON response mode for a full review. */
+async function callGeminiReview(msgs) {
+  const url = GEMINI_BASE.replace(/\/$/, '') + '/models/' + GEMINI_MODEL + ':generateContent?key=' + encodeURIComponent(GEMINI_API_KEY);
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 25000);
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: msgs.map(m => m.role + ': ' + m.content).join('\n\n') }] }],
+        generationConfig: {
+          temperature: 0.9,
+          maxOutputTokens: 1024,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'object',
+            properties: { review: { type: 'string' } },
+            required: ['review']
+          }
+        }
+      })
+    });
+  } catch (e) {
+    throw new Error('Gemini network error: ' + e.message);
+  } finally {
+    clearTimeout(t);
+  }
+  if (res.status === 429) {
+    throw Object.assign(new Error('Gemini 429 quota exceeded'), { quota: true });
+  }
+  if (!res.ok) {
+    throw new Error('Gemini HTTP ' + res.status + ': ' + (await res.text()).slice(0, 160));
+  }
+  const data = await res.json();
+  const content = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const cleaned = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
+  let parsed;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch (e) {
+    const s = cleaned.indexOf('{');
+    const en = cleaned.lastIndexOf('}');
+    if (s === -1 || en === -1) throw new Error('Gemini returned unparseable JSON');
+    parsed = JSON.parse(cleaned.slice(s, en + 1));
+  }
+  return String(parsed.review || '').trim();
 }
 
 
@@ -123,7 +199,21 @@ async function generateReviewWithAgent(inputs) {
   inputs = inputs || {};
   const rating = ratingOf(inputs.rating);
 
-  // 1. Prefer RAGFlow agent endpoint (same env vars as ragflowAgent.js).
+  // 0. Gemini (the project's configured AI): preferred live source when quota allows.
+  if (GEMINI_API_KEY) {
+    try {
+      const review = await callGeminiReview(buildMessages(inputs));
+      if (review) return { ok: true, source: 'gemini', review, context: buildBrainContext({ rating: rating, businessType: inputs.businessType, userText: inputs.userText }) };
+    } catch (e) {
+      if (e.quota) {
+        console.warn('[review-writer] Gemini quota exceeded, trying next source');
+      } else {
+        console.warn('[review-writer] Gemini unavailable:', e.message);
+      }
+    }
+  }
+
+  // 1. RAGFlow agent endpoint (same env vars as ragflowAgent.js).
   if (RAGFLOW_API_KEY && RAGFLOW_AGENT_ID) {
     try {
       const msgs = buildMessages(inputs);
@@ -138,7 +228,7 @@ async function generateReviewWithAgent(inputs) {
       });
       const data = await resp.json();
       if (data && data.data && data.data.answer) {
-        return { ok: true, source: 'ragflow', review: String(data.data.answer).trim() };
+        return { ok: true, source: 'ragflow', review: String(data.data.answer).trim(), context: buildBrainContext({ rating: rating, businessType: inputs.businessType, userText: inputs.userText }) };
       }
     } catch (e) {
       console.warn('[review-writer] RAGFlow unavailable:', e.message);
@@ -149,14 +239,14 @@ async function generateReviewWithAgent(inputs) {
   if (OPENAI_API_KEY) {
     try {
       const review = await callChat(OPENAI_BASE, OPENAI_API_KEY, OPENAI_MODEL, buildMessages(inputs));
-      if (review) return { ok: true, source: 'openai', review };
+      if (review) return { ok: true, source: 'openai', review: review, context: buildBrainContext({ rating: rating, businessType: inputs.businessType, userText: inputs.userText }) };
     } catch (e) {
       console.warn('[review-writer] OpenAI unavailable:', e.message);
     }
   }
 
-  // 3. Local positive-only fallback generator.
-  return { ok: true, source: 'local', review: localGenerate(inputs) };
+  // 3. Local positive-only fallback generator (still uses brain guidance).
+  return { ok: true, source: 'local', review: localGenerate(inputs), context: buildBrainContext({ rating: rating, businessType: inputs.businessType, userText: inputs.userText }) };
 }
 
 module.exports = { loadAgentPrompt, generateReviewWithAgent, localGenerate, ratingOf };

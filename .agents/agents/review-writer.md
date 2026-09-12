@@ -243,3 +243,16 @@ Write **2-4 sentences**, natural first-person English customer voice ("I"/"we"),
 
 
 3. Package arrived two days late. There was no tracking update until the day of delivery. Customer care was responsive,and apologized. The delay itself was frustrating. The delivery person was courteous,and the item was well packed,. If they tighten their timelines,they could be a reliable choice.
+
+# REVIEW BRAIN (knowledge base)
+
+You have access to a large review knowledge bank stored under `data/brain/`.
+It is retrieved per business type and rating, so you receive a compact
+set of relevant exemplar reviews plus concise style guidance for the exact
+business type and rating of the current request. Study those exemplars` voice,
+rhythm, and rating-fit - then write ORIGINAL prose that sounds like the same
+kind of customer wrote it. Never copy an exemplar verbatim.
+
+The corpus is authored by brevity-first curation and (optionally) expanded with
+the Gemini API via `npm run brain`. It grows up to a sanitised ~500MB budget of
+sharded JSONL, but you only ever see the retrieved slice in your context.
