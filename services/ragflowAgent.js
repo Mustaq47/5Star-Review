@@ -175,66 +175,35 @@ function getBusinessDomain(client) {
 
 
 // ═══════════════════════════════════════════════════════════════
-//  NEXT-WORD PREDICTION (Gemini → Local Fallback)
+//  NEXT-WORD PREDICTION (Instant Local Engine with Gemini Race)
 // ═══════════════════════════════════════════════════════════════
 
 async function suggestNextWords({ text = '', rating = 5, slug = '', client = null }) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
   const businessType = client ? (client.category || client.business_name) : '';
 
-  // Empty text: return starter suggestions
-  if (!text || text.trim().length === 0) {
-    // Try Gemini for smarter starters
-    if (isGeminiAvailable()) {
-      try {
-        const result = await predictWithGemini({
-          text: '',
-          rating: r,
-          businessType: businessType || 'restaurant',
-        });
-        if (result) return result;
-      } catch (e) {
-        console.warn('[suggestNextWords] Gemini starter failed:', e.message);
-      }
-    }
+  // 1. Calculate local instant prediction immediately (<5ms)
+  const localResult = localSuggestNextWords(text, r);
 
-    // Local fallback starters
-    if (r >= 4) {
-      return {
-        primary: 'I really loved the food, shakes, and wonderful ambience here',
-        alternatives: [
-          'The ice creams and crispy fried chicken are amazing',
-          'Visited with friends and had a fantastic experience',
-          'Definitely one of the best food spots in town'
-        ]
-      };
-    } else {
-      return {
-        primary: 'Service was a bit slow, but food taste was standard',
-        alternatives: [
-          'Average experience, room for improvement in speed',
-          'Food quality was decent for the price'
-        ]
-      };
-    }
-  }
-
-  // ── Try Gemini first for intelligent prediction ──
+  // 2. If Gemini is available, attempt fast 350ms race
   if (isGeminiAvailable()) {
     try {
-      const result = await predictWithGemini({
+      const geminiPromise = predictWithGemini({
         text,
         rating: r,
         businessType: businessType || 'restaurant',
       });
-      if (result) return result;
+      const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 350));
+      const result = await Promise.race([geminiPromise, timeoutPromise]);
+      if (result && result.primary && result.primary.trim().length > 0) {
+        return result;
+      }
     } catch (e) {
-      console.warn('[suggestNextWords] Gemini predict failed:', e.message);
+      // ignore and return localResult
     }
   }
 
-  // ── Local fallback engine (original logic) ──
-  return localSuggestNextWords(text, r);
+  return localResult;
 }
 
 function localSuggestNextWords(text, r) {
@@ -489,15 +458,113 @@ async function generateReview({ slug, rating = 5, tags = [], previousText = '', 
   let sentences = [];
   const tagPool = localGetTagsForRating(r, 12);
 
+const TAG_VARIATION_BANKS = {
+  ice_cream: [
+    'The ice creams are exquisitely creamy, rich, and full of delightful flavours.',
+    'Their ice cream flavours have the perfect velvety texture with generous scoops.',
+    'Tried the artisan ice cream varieties and every single one was pure bliss.',
+    'The ice creams here are smooth, freshly prepared, and genuinely delicious.',
+    'You get generous portions of creamy, indulgent ice cream that hits the spot.',
+    'Hands down some of the most decadent and flavourful ice creams in town.'
+  ],
+  milkshake: [
+    'The thick milkshakes are perfectly blended and an absolute treat.',
+    'Milkshakes had an incredibly rich, velvety consistency and rich flavour.',
+    'Every sip of their thick shake is packed with creamy, chilled perfection.',
+    'Loved the milkshake selection — super thick, creamy, and made with top ingredients.',
+    'The milkshakes are thick, cold, and loaded with authentic flavour.',
+    'Ordered the signature thick shakes and they completely exceeded all expectations.'
+  ],
+  pizza: [
+    'The pizzas are freshly baked with a golden crispy crust and plenty of cheese.',
+    'Freshly baked pizza with generous mozzarella and mouth-watering toppings.',
+    'The pizza crust was crispy on the edges with rich sauce and gooey melted cheese.',
+    'Loved the pizza — piping hot, flavourful, and baked to golden perfection.',
+    'The pizza toppings are fresh and the crust has the ultimate crunch.',
+    'Deliciously cheesy, hot, and satisfying pizzas made fresh to order.'
+  ],
+  chicken: [
+    'The fried chicken is crispy on the outside, tender and juicy inside.',
+    'Crispy chicken seasoned to perfection with an irresistible crunch.',
+    'Chicken was fried fresh, wonderfully juicy, and served piping hot.',
+    'The crispy fried chicken and spicy wings were crunchy, tender, and bursting with flavor.',
+    'Chicken pieces are well-marinated, crispy, and full of authentic spice.',
+    'Tender, juicy, and coated in the crispiest golden batter.'
+  ],
+  service: [
+    'The service is exceptionally prompt, and the staff are warmly welcoming.',
+    'Staff members are attentive, courteous, and provide lightning fast service.',
+    'Impressed by the friendly hospitality and quick turnaround times.',
+    'Service was smooth, professional, and handled with genuine care.',
+    'The team was proactive, polite, and made sure we had everything we needed.',
+    'Quick service and welcoming smiles made the visit extra special.'
+  ],
+  pocket_friendly: [
+    'Generous portions at very reasonable prices — outstanding value.',
+    'Pricing is very reasonable and gives incredible value for every rupee spent.',
+    'Pocket-friendly pricing combined with top-tier food quality is a huge plus.',
+    'Great food at prices that are easy on the pocket without compromising on taste.',
+    'Super affordable menu with large portions that leave you completely satisfied.',
+    'Outstanding value for money — generous servings and very honest pricing.'
+  ],
+  ambience: [
+    'The night fairy lights and vibrant ambience create a wonderful cozy vibe.',
+    'Ambience is warm, lively, and beautifully lit for evening hangouts.',
+    'Loved the aesthetic decor, fairy lights, and relaxing background music.',
+    'The seating area is cozy, modern, and has a great welcoming atmosphere.',
+    'Fairy lights and comfortable seating make this the ultimate evening spot.',
+    'Great vibe, peaceful seating, and beautiful lighting throughout the place.'
+  ],
+  cream_more: [
+    'The Cream More special desserts and sundaes are top-notch and a must-try.',
+    'Cream More desserts are rich, layered with goodness, and wonderfully satisfying.',
+    'Their signature Cream More sundaes are an absolute masterpiece of sweetness.',
+    'Tried the Cream More special sundae and it was decadent from first bite to last.'
+  ],
+  family: [
+    'A wonderful, clean environment for family gatherings and evening hangouts.',
+    'Spacious, hygienic, and very accommodating for families and groups.',
+    'Family-friendly setting with clean tables, great music, and comfortable seating.',
+    'A fantastic spot to bring family and kids for a relaxed and delicious meal.'
+  ],
+  recommend: [
+    'Hands down one of the finest food and dessert spots in town — 10/10 experience!',
+    'Would recommend this wonderful spot to all foodies and dessert lovers without hesitation.',
+    'An absolute 10/10 experience that I will gladly recommend to all my friends.',
+    'Definitely a must-visit spot in the area — top quality in every aspect.'
+  ]
+};
+
+function getSentenceForTag(tagLabel) {
+  const t = (tagLabel || '').toLowerCase();
+  let pool = null;
+  if (t.includes('ice cream') || t.includes('gelato')) pool = TAG_VARIATION_BANKS.ice_cream;
+  else if (t.includes('shake') || t.includes('milk')) pool = TAG_VARIATION_BANKS.milkshake;
+  else if (t.includes('pizza')) pool = TAG_VARIATION_BANKS.pizza;
+  else if (t.includes('chicken') || t.includes('wing')) pool = TAG_VARIATION_BANKS.chicken;
+  else if (t.includes('service') || t.includes('staff') || t.includes('fast')) pool = TAG_VARIATION_BANKS.service;
+  else if (t.includes('pocket') || t.includes('value') || t.includes('price')) pool = TAG_VARIATION_BANKS.pocket_friendly;
+  else if (t.includes('ambien') || t.includes('light') || t.includes('cozy') || t.includes('vibe')) pool = TAG_VARIATION_BANKS.ambience;
+  else if (t.includes('cream more') || t.includes('sundae') || t.includes('dessert')) pool = TAG_VARIATION_BANKS.cream_more;
+  else if (t.includes('family') || t.includes('clean') || t.includes('hygiene')) pool = TAG_VARIATION_BANKS.family;
+  else if (t.includes('recommend') || t.includes('favourite') || t.includes('10/10')) pool = TAG_VARIATION_BANKS.recommend;
+
+  if (pool && pool.length > 0) {
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  const cleanTag = tagLabel.replace(/^[^\w\s]+/, '').trim();
+  const genericVariations = [
+    `The ${cleanTag.toLowerCase()} was exceptionally fresh, flavorful, and prepared with great care.`,
+    `Really impressed with the ${cleanTag.toLowerCase()} — outstanding taste and presentation.`,
+    `The ${cleanTag.toLowerCase()} stood out as a highlight of our visit.`,
+    `Enjoyed the quality of the ${cleanTag.toLowerCase()}, completely satisfied with the taste.`
+  ];
+  return genericVariations[Math.floor(Math.random() * genericVariations.length)];
+}
+
   if (tags.length > 0) {
     tags.forEach(selectedTag => {
-      const match = tagPool.find(item => item.l.toLowerCase() === selectedTag.toLowerCase() || selectedTag.includes(item.l));
-      if (match && match.t) {
-        sentences.push(match.t);
-      } else {
-        const cleanTag = selectedTag.replace(/^[^\w\s]+/, '').trim();
-        sentences.push(`The ${cleanTag.toLowerCase()} was exceptionally flavorful, fresh, and well-prepared.`);
-      }
+      sentences.push(getSentenceForTag(selectedTag));
     });
   } else {
     const sampleDish = domain.dishes[Math.floor(Math.random() * domain.dishes.length)];

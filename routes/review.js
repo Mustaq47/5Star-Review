@@ -295,30 +295,31 @@ ${isCoolSpicy ? `
 
 /* ── TEXTAREA & INLINE PREDICTION ── */
 .tw{
-  position:relative;margin-bottom:12px;border-radius:15px;
-  border:1px solid;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  transition:all .3s;overflow:hidden;
+  position:relative;margin-bottom:14px;border-radius:16px;
+  border:1px solid;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  transition:border-color .25s ease, box-shadow .25s ease, background .25s ease;
+  overflow:hidden;
 }
-.root.light .tw{background:rgba(255,255,255,0.52);border-color:rgba(186,230,253,0.9)}
-.root.dark  .tw{background:rgba(7,18,36,0.55);border-color:rgba(56,189,248,0.18)}
-.root.light .tw:focus-within{border-color:rgba(14,165,233,0.6);background:rgba(255,255,255,0.75)}
-.root.dark  .tw:focus-within{border-color:rgba(56,189,248,0.35);background:rgba(10,24,46,0.7)}
+.root.light .tw{background:rgba(255,255,255,0.72);border-color:rgba(186,230,253,0.95);box-shadow:0 2px 14px rgba(2,132,199,0.06)}
+.root.dark  .tw{background:rgba(7,18,36,0.65);border-color:rgba(56,189,248,0.22);box-shadow:0 2px 16px rgba(0,0,0,0.3)}
+.root.light .tw:focus-within{border-color:rgba(2,132,199,0.8);background:rgba(255,255,255,0.9);box-shadow:0 0 0 3px rgba(2,132,199,0.12), 0 4px 20px rgba(2,132,199,0.1)}
+.root.dark  .tw:focus-within{border-color:rgba(56,189,248,0.5);background:rgba(10,24,46,0.82);box-shadow:0 0 0 3px rgba(56,189,248,0.15), 0 4px 20px rgba(0,0,0,0.4)}
 
 .ta, .ta-mirror{
   width:100%;font-family:'DM Sans',sans-serif;
-  font-size:14px;line-height:1.68;padding:14px;
+  font-size:14.5px;line-height:1.65;padding:15px;
   box-sizing:border-box;margin:0;border:none;outline:none;
   word-break:break-word;white-space:pre-wrap;
-  letter-spacing:normal;
+  letter-spacing:-0.01em;
 }
 .ta{
   position:relative;z-index:2;background:transparent!important;
-  resize:none;min-height:130px;display:block;
+  resize:none;min-height:135px;display:block;
 }
-.root.light .ta{color:#0c2340;caret-color:#0284c7}
+.root.light .ta{color:#091e36;caret-color:#0284c7}
 .root.dark  .ta{color:#f0f9ff;caret-color:#38bdf8}
-.root.light .ta::placeholder{color:rgba(14,116,144,0.45)}
-.root.dark  .ta::placeholder{color:rgba(186,230,253,0.38)}
+.root.light .ta::placeholder{color:rgba(14,116,144,0.42)}
+.root.dark  .ta::placeholder{color:rgba(186,230,253,0.35)}
 
 .ta-mirror{
   position:absolute;top:0;left:0;right:0;bottom:0;
@@ -326,30 +327,26 @@ ${isCoolSpicy ? `
   color:transparent;user-select:none;
 }
 .ta-mirror .typed{visibility:hidden;color:transparent}
-.ta-mirror .sugg{visibility:visible;font-weight:400;opacity:0.55}
+.ta-mirror .sugg{visibility:visible;font-weight:400;opacity:0.65}
 .root.light .ta-mirror .sugg{color:#0284c7}
 .root.dark  .ta-mirror .sugg{color:#38bdf8}
 
 .tab-hint{
-  position:absolute;bottom:8px;right:10px;z-index:3;
-  font-family:'DM Sans',sans-serif;font-size:10.5px;font-weight:600;
-  border-radius:6px;padding:3px 8px;cursor:pointer;
-  transition:all .2s;display:none;align-items:center;gap:4px;
+  position:absolute;bottom:10px;right:12px;z-index:5;
+  font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;
+  border-radius:20px;padding:4px 10px;cursor:pointer;
+  transition:all .2s cubic-bezier(.34,1.4,.64,1);
+  display:none;align-items:center;gap:5px;
 }
-.root.light .tab-hint{background:rgba(224,242,254,0.85);color:#0369a1;border:1px solid rgba(2,132,199,0.3)}
-.root.dark  .tab-hint{background:rgba(14,165,233,0.18);color:#bae6fd;border:1px solid rgba(56,189,248,0.3)}
-.tab-hint:hover{transform:scale(1.03)}
-.alts{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:6px;}
-.alt-chip{
-  font-size:11px;font-family:'DM Mono',monospace;padding:3px 8px;border-radius:8px;
-  cursor:pointer;border:1px solid transparent;transition:all .2s;
-  background:rgba(14,165,233,0.10);color:#0284c7;
-  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+.tab-hint .tab-k{
+  font-family:'DM Mono',monospace;font-size:10px;padding:1px 5px;border-radius:5px;
 }
-.root.dark  .alt-chip{color:#7dd3fc;background:rgba(56,189,248,0.10);border-color:rgba(56,189,248,0.18)}
-.root.light .alt-chip{border-color:rgba(2,132,199,0.22)}
-.alt-chip:hover{transform:translateY(-1px);}
-.alt-chip:active{transform:translateY(0);}
+.root.light .tab-hint{background:rgba(255,255,255,0.92);color:#0369a1;border:1px solid rgba(186,230,253,0.95);box-shadow:0 2px 8px rgba(2,132,199,0.12)}
+.root.light .tab-hint .tab-k{background:rgba(2,132,199,0.12);color:#0284c7}
+.root.dark  .tab-hint{background:rgba(14,30,56,0.92);color:#7dd3fc;border:1px solid rgba(56,189,248,0.35);box-shadow:0 2px 10px rgba(0,0,0,0.35)}
+.root.dark  .tab-hint .tab-k{background:rgba(56,189,248,0.18);color:#38bdf8}
+.tab-hint:hover{transform:scale(1.05);filter:brightness(1.05)}
+.tab-hint:active{transform:scale(0.97)}
 
 /* ── SECTION LABEL ── */
 .sl{
@@ -573,8 +570,10 @@ ${isCoolSpicy ? `
             placeholder="What stood out about your visit?"
             oninput="onTA()" onscroll="syncScroll()" onkeydown="onKey(event)"></textarea>
           <div class="tab-hint" id="tabHint" onclick="acceptSuggestion()">
-            <span>Tab ⇥</span>
+            <span class="tab-k">Tab ⇥</span> <span class="tab-txt">Complete</span>
           </div>
+        </div>
+
         <div class="sl">Quick tags</div>
         <div class="tags" id="tags"></div>
 
@@ -835,69 +834,19 @@ function updateMirror() {
   const hint = document.getElementById('tabHint');
   if (!ta || !mirror) return;
   const v = ta.value;
-  if (sugg && v) {
+  if (sugg && v && v.trim().length > 0) {
     const prefix = (!v.endsWith(' ') && !sugg.startsWith(' ')) ? ' ' : '';
     mirror.innerHTML = '<span class="typed">' + esc(v) + '</span><span class="sugg">' + esc(prefix + sugg.trim()) + '</span>';
-    if (hint) hint.style.display = 'inline-flex';
+    if (hint) {
+      hint.style.display = 'inline-flex';
+      const previewText = sugg.trim().length > 24 ? sugg.trim().slice(0, 22) + '…' : sugg.trim();
+      hint.innerHTML = '<span class="tab-k">Tab ⇥</span> <span class="tab-txt">' + esc(previewText) + '</span>';
+    }
   } else {
     mirror.innerHTML = '';
     if (hint) hint.style.display = 'none';
   }
   mirror.scrollTop = ta.scrollTop;
-}
-
-function pollSuggestionEnhance(text, rating, attempt, gen) {
-  // Ignore stale polls if the user has typed new text since this poll began.
-  if (gen !== sugGen) return;
-  // Refresh the badge to hint the smarter result is still on its way.
-  const th = document.getElementById('th');
-  if (th && attempt === 0) {
-    th.innerHTML = '<span class="th-badge">⚡ Enhancing with Gemini…</span> <span style="opacity:0.6;font-size:10px">giving even better suggestions</span>';
-  }
-  if (attempt > 8) return; // ~6s max: 8 × 800ms
-
-  setTimeout(() => {
-    if (gen !== sugGen) return;
-    fetch('/r/' + SLUG + '/suggest/enhance', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, rating })
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (gen !== sugGen || !data.ok) return;
-      if (data.ready && data.suggestion) {
-        applySuggestion(data.suggestion);
-      } else {
-        pollSuggestionEnhance(text, rating, attempt + 1, gen);
-      }
-    })
-    .catch(() => {
-      pollSuggestionEnhance(text, rating, attempt + 1, gen);
-    });
-  }, attempt === 0 ? 1200 : 800);
-}
-
-function applySuggestion(suggestion) {
-  const prim = typeof suggestion === 'string' ? suggestion : suggestion.primary;
-  const alts = suggestion.alternatives || [];
-  sugg = prim || '';
-  currentAlts = alts;
-  const ta = document.getElementById('ta');
-  if (!ta) return;
-
-  if (sugg) {
-    document.getElementById('th').innerHTML =
-      '<span class="th-badge">⚡ Gemini Suggestion</span> <span style="opacity:0.9">' + esc(sugg) + '</span> <span style="opacity:0.6;font-size:10px">(Tab or tap to complete)</span>';
-    document.getElementById('ghost').innerHTML =
-      esc(ta.value) + '<span class="gs">' + esc(sugg) + '</span>';
-  }
-  const altRow = document.getElementById('alts');
-  if (altRow) {
-    altRow.innerHTML = currentAlts.map(alt =>
-      '<span class="alt-chip" title="Click to use this sentence" onclick="acceptSuggestion(' + JSON.stringify(alt) + ')">' + esc(alt) + '</span>'
-    ).join('');
-  }
 }
 
 function onTA() {
@@ -909,10 +858,8 @@ function onTA() {
     clrS();
     return;
   }
-  clrS();
 
   clearTimeout(sgT);
-  const myGen = ++sugGen;
   sgT = setTimeout(() => {
     fetch('/r/' + SLUG + '/suggest', {
       method: 'POST',
@@ -928,7 +875,8 @@ function onTA() {
       }
     })
     .catch(() => {});
-  }, 100);
+  }, 50);
+}
 }
 
 function acceptSuggestion() {
