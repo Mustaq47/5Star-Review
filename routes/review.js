@@ -520,15 +520,7 @@ function go(n) {
     document.querySelectorAll('.dot')[i].className = 'dot' + (i===n?' on':'');
   }
   if (n===1) {
-    if (!document.getElementById('ta').value.trim() && activeTags.size === 0) {
-      // Pick first 2 tags and generate initial unique review
-      if (CURRENT_TAGS.length > 0) {
-        activeTags.add(CURRENT_TAGS[0].l);
-        if (CURRENT_TAGS[1]) activeTags.add(CURRENT_TAGS[1].l);
-        renderTags();
-        triggerAgentGeneration();
-      }
-    }
+    renderTags();
   }
   if (n===2) buildPreview();
 }
