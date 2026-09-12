@@ -6,7 +6,15 @@ const bcrypt = require('bcryptjs');
 let dbPath = path.join(__dirname, '..', 'reviewpro.db');
 
 if (process.env.RAILWAY_VOLUME_MOUNT_PATH) {
-  dbPath = path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'reviewpro.db');
+  const mountDir = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+  try {
+    if (!fs.existsSync(mountDir)) {
+      fs.mkdirSync(mountDir, { recursive: true });
+    }
+  } catch (e) {
+    console.warn('Volume directory create notice:', e.message);
+  }
+  dbPath = path.join(mountDir, 'reviewpro.db');
 } else if (process.env.VERCEL) {
   const tmpDb = '/tmp/reviewpro.db';
   try {

@@ -1,15 +1,19 @@
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim
 
 WORKDIR /app
-RUN apk add --no-cache python3 make g++ sqlite-dev
+
+# Install native compilation dependencies for better-sqlite3
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    sqlite3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
-FROM node:20-alpine
-
-WORKDIR /app
-RUN apk add --no-cache sqlite
-COPY --from=builder /app/node_modules ./node_modules
 COPY . .
 
 ENV NODE_ENV=production

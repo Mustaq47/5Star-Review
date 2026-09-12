@@ -42,10 +42,14 @@ app.use((req, res) => {
 });
 
 if (require.main === module || !process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log('\n✅ ReviewPro running at http://localhost:' + PORT);
-    console.log('   Admin:  http://localhost:' + PORT + '/admin/login');
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log('\n✅ ReviewPro running on port ' + PORT);
+    console.log('   Admin:  http://0.0.0.0:' + PORT + '/admin/login');
     console.log('   Login:  admin@reviewpro.in / admin123\n');
+  });
+
+  server.on('error', (err) => {
+    console.error('Server listen error:', err);
   });
 }
 
