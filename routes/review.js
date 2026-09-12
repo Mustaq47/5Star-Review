@@ -395,9 +395,21 @@ ${isCoolSpicy ? `
 }
 .btn i{font-size:17px}
 
-.bp{background:linear-gradient(135deg,#bd8f7d 0%,#a87967 100%);border-color:rgba(255,255,255,0.22);color:#fff;box-shadow:0 4px 22px rgba(189,143,125,0.35),inset 0 1px 0 rgba(255,255,255,0.25)}
+.bp{
+  background:linear-gradient(135deg,#38bdf8 0%,#0ea5e9 25%,#f43f5e 70%,#ef4444 100%);
+  background-size:260% 260%;
+  border-color:rgba(255,255,255,0.25);
+  color:#fff;
+  animation:btnColorShift 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+  position:relative;overflow:hidden;
+}
+@keyframes btnColorShift{
+  0%{background-position:0% 50%;box-shadow:0 4px 22px rgba(56,189,248,0.38),inset 0 1px 0 rgba(255,255,255,0.3)}
+  50%{box-shadow:0 4px 22px rgba(168,85,247,0.35),inset 0 1px 0 rgba(255,255,255,0.3)}
+  100%{background-position:100% 50%;box-shadow:0 4px 24px rgba(239,68,68,0.4),inset 0 1px 0 rgba(255,255,255,0.3)}
+}
 .root.dark .bp{opacity:0.95}
-.bp:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.bp:hover{filter:brightness(1.08);transform:translateY(-1.5px)}
 .bp:active{transform:scale(0.98)}
 
 .root.light .bs{background:rgba(255,255,255,0.65);border-color:rgba(186,230,253,0.9);color:#0369a1}

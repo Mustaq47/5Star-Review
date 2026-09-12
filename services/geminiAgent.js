@@ -13,7 +13,7 @@
 const db = require('../db/setup');
 const path = require('path');
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'gemini-embedding-001';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
