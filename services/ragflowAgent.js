@@ -52,171 +52,498 @@ const DOMAIN_LEXICONS = {
 };
 
 /**
- * Local Next-Word Context Transitions (FALLBACK)
+ * Rating-Calibrated Context Transitions
  */
-const CONTEXT_TRANSITIONS = {
-  'i': [
-    ' really loved the food and the wonderful fairy light atmosphere here',
-    ' had an extraordinary experience and thoroughly enjoyed everything we ordered',
-    ' tried their signature ice creams and crispy chicken — both were incredible',
-    ' visited with my family and was genuinely blown away by the taste and hospitality',
-    ' ordered the thick shakes and pizzas, and the taste was pure perfection',
-    ' would highly recommend this place to anyone looking for great taste and good vibes',
-    ' loved the quick service, great music, and friendly staff'
-  ],
-  'we': [
-    ' had a fantastic time enjoying the delicious food and cozy ambience',
-    ' tried multiple items from the menu and each one was prepared to perfection',
-    ' loved the crispy fried chicken, loaded pizzas, and creamy thick shakes',
-    ' came here for an evening hangout with friends and had a wonderful time',
-    ' were very impressed with the cleanliness, prompt service, and portion sizes',
-    ' ordered a variety of desserts and they were rich, creamy, and delightful'
-  ],
-  'the': [
-    ' food quality, taste, and hospitality here are absolutely outstanding',
-    ' ice creams and thick shakes are rich, creamy, and an absolute treat',
-    ' crispy fried chicken is super crunchy on the outside and juicy inside',
-    ' pizzas have a wonderful golden crust with plenty of delicious toppings',
-    ' ambience with fairy lights creates a cozy and magical evening vibe',
-    ' staff members are polite, attentive, and provide lightning fast service',
-    ' prices are very pocket-friendly and offer incredible value for money'
-  ],
-  'food': [
-    ' was fresh, flavorful, and served piping hot with great presentation',
-    ' quality exceeded all our expectations — absolutely delicious',
-    ' here is authentic, hygienic, and prepared with high quality ingredients',
-    ' was served surprisingly fast and tasted super fresh'
-  ],
-  'food was': [
-    ' fresh, delicious, and prepared with top quality ingredients',
-    ' served piping hot with wonderful presentation and rich flavors',
-    ' super tasty and exceeded all our expectations'
-  ],
-  'pizza was': [
-    ' cheesy, hot, with a perfectly baked crispy golden crust',
-    ' loaded with toppings and had amazing flavor in every bite',
-    ' absolutely delicious and one of the best we have tasted'
-  ],
-  'chicken was': [
-    ' crispy on the outside, juicy inside, and seasoned to perfection',
-    ' super crunchy and full of authentic spicy flavor'
-  ],
-  'ice cream was': [
-    ' thick, creamy, rich, and made with genuine premium ingredients',
-    ' delightfully refreshing and bursting with authentic flavour'
-  ],
-  'shake was': [
-    ' thick, chilled, and packed with rich authentic flavor',
-    ' very creamy and satisfying from first sip to last'
-  ],
-  'service was': [
-    ' lightning fast, warm, and attentive throughout our visit',
-    ' courteous, prompt, and delivered with a welcoming smile'
-  ],
-  'staff were': [
-    ' extremely welcoming, helpful with recommendations, and very polite',
-    ' courteous, attentive, and maintain high hygiene standards'
-  ],
-  'ambience was': [
-    ' cozy, relaxing, and beautifully lit with fairy lights in the evening',
-    ' peaceful, clean, and perfect for family and friends hangout'
-  ],
-  'was': [
-    ' fresh, flavorful, and served with great presentation',
-    ' absolutely delicious and exceeded all our expectations',
-    ' prepared to perfection and worth every single penny',
-    ' quick, polite, and very welcoming throughout'
-  ],
-  'were': [
-    ' extremely courteous, prompt, and attentive to every detail',
-    ' delicious, rich in flavor, and served piping hot',
-    ' very impressed with the quality and hospitality'
-  ],
-  'is': [
-    ' fresh, authentic, and bursting with great flavors',
-    ' definitely one of the top spots in town for foodies',
-    ' clean, well-maintained, and very pocket-friendly'
-  ],
-  'are': [
-    ' super friendly, attentive, and ensure a memorable visit',
-    ' rich, creamy, and made with top-quality ingredients',
-    ' generous in portion size and very reasonably priced'
-  ],
-  'taste': [
-    ' is genuinely authentic, mouth-watering, and memorable in every bite',
-    ' was completely on point with rich flavors and perfect seasoning',
-    ' and presentation are top-tier — by far the best in the area'
-  ],
-  'ice cream': [
-    ' flavours are rich, smooth, and delightfully creamy with plenty of varieties',
-    ' specials like Cream More and Belgian Chocolate are must-tries',
-    ' was thick, creamy, and made with genuine premium ingredients'
-  ],
-  'service': [
-    ' was lightning fast, warm, and attentive throughout our visit',
-    ' is quick, courteous, and handled with a welcoming smile',
-    ' speed was impressive even during peak rush hours'
-  ],
-  'staff': [
-    ' were extremely welcoming, helpful with recommendations, and very polite',
-    ' are courteous, attentive, and maintain great hygiene standards'
-  ],
-  'ambience': [
-    ' with fairy lights looks stunning at night and creates a relaxing vibe',
-    ' is modern, lively, and great for family dinners as well as friends hangouts'
-  ],
-  'price': [
-    ' is very reasonable considering the generous portions and high food quality',
-    ' points are pocket-friendly and give great value for every rupee spent'
-  ],
-  'highly': [
-    ' recommend this spot to all foodies, families, and dessert lovers',
-    ' satisfied with the taste, cleanliness, and wonderful hospitality'
-  ],
-  'definitely': [
-    ' coming back again soon with friends and family for another treat',
-    ' worth visiting if you appreciate great taste and quality'
-  ],
-  'recommend': [
-    ' this spot to all foodies, families, and dessert lovers without hesitation',
-    ' visiting in the evening to enjoy the fairy lights and great atmosphere'
-  ]
+const RATING_CONTEXT_TRANSITIONS = {
+  // ── 5 STARS: Glowing, Enthusiastic ──
+  5: {
+    'i': [
+      ' really loved the food and the wonderful fairy light atmosphere here',
+      ' had an extraordinary experience and thoroughly enjoyed everything we ordered',
+      ' tried their signature ice creams and crispy chicken — both were incredible',
+      ' visited with my family and was genuinely blown away by the taste and hospitality',
+      ' ordered the thick shakes and pizzas, and the taste was pure perfection',
+      ' would highly recommend this place to anyone looking for great taste and good vibes'
+    ],
+    'we': [
+      ' had a fantastic time enjoying the delicious food and cozy ambience',
+      ' tried multiple items from the menu and each one was prepared to perfection',
+      ' loved the crispy fried chicken, loaded pizzas, and creamy thick shakes',
+      ' came here for an evening hangout with friends and had a wonderful time',
+      ' were very impressed with the cleanliness, prompt service, and portion sizes'
+    ],
+    'the': [
+      ' food quality, taste, and hospitality here are absolutely outstanding',
+      ' ice creams and thick shakes are rich, creamy, and an absolute treat',
+      ' crispy fried chicken is super crunchy on the outside and juicy inside',
+      ' pizzas have a wonderful golden crust with plenty of delicious toppings',
+      ' ambience with fairy lights creates a cozy and magical evening vibe',
+      ' staff members are polite, attentive, and provide lightning fast service'
+    ],
+    'food': [
+      ' was fresh, flavorful, and served piping hot with great presentation',
+      ' quality exceeded all our expectations — absolutely delicious',
+      ' here is authentic, hygienic, and prepared with high quality ingredients'
+    ],
+    'food was': [
+      ' fresh, delicious, and prepared with top quality ingredients',
+      ' served piping hot with wonderful presentation and rich flavors',
+      ' super tasty and exceeded all our expectations'
+    ],
+    'pizza was': [
+      ' cheesy, hot, with a perfectly baked crispy golden crust',
+      ' loaded with toppings and had amazing flavor in every bite'
+    ],
+    'chicken was': [
+      ' crispy on the outside, juicy inside, and seasoned to perfection',
+      ' super crunchy and full of authentic spicy flavor'
+    ],
+    'ice cream was': [
+      ' thick, creamy, rich, and made with genuine premium ingredients',
+      ' delightfully refreshing and bursting with authentic flavour'
+    ],
+    'shake was': [
+      ' thick, chilled, and packed with rich authentic flavor',
+      ' very creamy and satisfying from first sip to last'
+    ],
+    'service was': [
+      ' lightning fast, warm, and attentive throughout our visit',
+      ' courteous, prompt, and delivered with a welcoming smile'
+    ],
+    'staff were': [
+      ' extremely welcoming, helpful with recommendations, and very polite',
+      ' courteous, attentive, and maintain high hygiene standards'
+    ],
+    'ambience was': [
+      ' cozy, relaxing, and beautifully lit with fairy lights in the evening',
+      ' peaceful, clean, and perfect for family and friends hangout'
+    ],
+    'was': [
+      ' fresh, flavorful, and served with great presentation',
+      ' absolutely delicious and exceeded all our expectations',
+      ' prepared to perfection and worth every single penny'
+    ],
+    'were': [
+      ' extremely courteous, prompt, and attentive to every detail',
+      ' delicious, rich in flavor, and served piping hot'
+    ],
+    'is': [
+      ' fresh, authentic, and bursting with great flavors',
+      ' definitely one of the top spots in town for foodies'
+    ],
+    'are': [
+      ' super friendly, attentive, and ensure a memorable visit',
+      ' rich, creamy, and made with top-quality ingredients'
+    ],
+    'highly': [
+      ' recommend this spot to all foodies, families, and dessert lovers',
+      ' satisfied with the taste, cleanliness, and wonderful hospitality'
+    ],
+    'definitely': [
+      ' coming back again soon with friends and family for another treat',
+      ' worth visiting if you appreciate great taste and quality'
+    ]
+  },
+
+  // ── 4 STARS: Warm, Positive, Good Value ──
+  4: {
+    'i': [
+      ' had a pleasant dining experience and enjoyed the food overall',
+      ' liked the taste of the dishes and the friendly service',
+      ' ordered pizza and shakes, and both were good in quality'
+    ],
+    'we': [
+      ' had a good time dining here and liked the atmosphere',
+      ' enjoyed our meal and found the pricing quite reasonable'
+    ],
+    'the': [
+      ' food was delicious and served fresh in good portion sizes',
+      ' shakes and pizzas were tasty and well prepared',
+      ' staff were friendly and attentive throughout our meal'
+    ],
+    'food': [
+      ' was good, flavorful, and well-seasoned',
+      ' arrived in reasonable time and tasted fresh'
+    ],
+    'food was': [
+      ' tasty, well-prepared, and served fresh',
+      ' good in flavor and nicely presented'
+    ],
+    'pizza was': [
+      ' flavorful with good cheese and crispy crust',
+      ' freshly baked and tasted nice'
+    ],
+    'chicken was': [
+      ' nice and crispy with good seasoning',
+      ' well cooked and tasty'
+    ],
+    'ice cream was': [
+      ' smooth and flavorful with nice varieties',
+      ' good and served nicely chilled'
+    ],
+    'shake was': [
+      ' thick, tasty, and good in texture',
+      ' refreshing and nicely made'
+    ],
+    'service was': [
+      ' prompt, polite, and handled with care',
+      ' friendly and accommodating'
+    ],
+    'staff were': [
+      ' helpful, courteous, and polite',
+      ' welcoming and took our orders smoothly'
+    ],
+    'ambience was': [
+      ' pleasant, clean, and nicely maintained',
+      ' comfortable for a quick meal with friends'
+    ],
+    'was': [
+      ' tasty, well-made, and satisfied our cravings',
+      ' good and definitely worth trying'
+    ],
+    'were': [
+      ' polite, attentive, and helpful',
+      ' tasty and served warm'
+    ],
+    'is': [
+      ' a solid spot for good food and reasonable prices',
+      ' clean and comfortable'
+    ],
+    'are': [
+      ' friendly and attentive to customer requests',
+      ' reasonably priced with good portions'
+    ],
+    'highly': [
+      ' recommend giving this place a try for good food',
+      ' happy with the service and taste'
+    ],
+    'definitely': [
+      ' a good option for an evening snack and desserts',
+      ' plan to visit again sometime'
+    ]
+  },
+
+  // ── 3 STARS: Balanced, Average, Scope for Improvement ──
+  3: {
+    'i': [
+      ' had an average experience, some dishes were fine while others could be improved',
+      ' felt the food was okay, but expected a bit more flavor for the price',
+      ' visited for a quick bite, overall an average visit'
+    ],
+    'we': [
+      ' had a mixed experience with some items being better than others',
+      ' found the food average and service could be a bit quicker'
+    ],
+    'the': [
+      ' food was okay, though there is scope for improvement in portion size',
+      ' taste was decent and average for the price',
+      ' ambience was fine but could use some better seating'
+    ],
+    'food': [
+      ' was okay, though nothing extraordinary',
+      ' took a while to arrive and was moderately warm'
+    ],
+    'food was': [
+      ' decent and average, but could have been served warmer',
+      ' okay, though lacked a bit of punch in seasoning'
+    ],
+    'pizza was': [
+      ' average, crust could be a bit softer and toppings more generous',
+      ' okay, standard bakery style taste'
+    ],
+    'chicken was': [
+      ' a bit oily, though flavor was acceptable',
+      ' average and could have been crispier'
+    ],
+    'ice cream was': [
+      ' standard taste, nothing special compared to other places',
+      ' okay, could offer more variety'
+    ],
+    'shake was': [
+      ' a bit watery and could be thicker',
+      ' average in taste and standard sweetness'
+    ],
+    'service was': [
+      ' standard and okay, though a bit slow during rush hours',
+      ' fine, but could be slightly more attentive'
+    ],
+    'staff were': [
+      ' okay, but seemed a bit busy and occupied',
+      ' polite enough, though service was slightly delayed'
+    ],
+    'ambience was': [
+      ' average and could be maintained a bit better',
+      ' okay for a quick casual stop'
+    ],
+    'was': [
+      ' average and standard, could be improved with better consistency',
+      ' decent but nothing extraordinary'
+    ],
+    'were': [
+      ' okay, but took longer than expected to serve',
+      ' standard in quality'
+    ],
+    'is': [
+      ' an okay option if you are nearby, but has room to improve',
+      ' average in pricing and quality'
+    ],
+    'are': [
+      ' okay, but could be improved in portion size and taste',
+      ' standard, nothing exceptional'
+    ],
+    'highly': [
+      ' suggest focusing on faster service and food consistency',
+      ' recommend minor tweaks to improve the taste'
+    ],
+    'definitely': [
+      ' has potential if they improve the wait times and food temperature',
+      ' an okay place for a quick stop'
+    ]
+  },
+
+  // ── 1-2 STARS: Constructive Criticism, Issues, Delays ──
+  1: {
+    'i': [
+      ' was disappointed with the long wait time and food temperature',
+      ' had an underwhelming experience and expected much better quality',
+      ' was not satisfied with the service and attitude of the staff'
+    ],
+    'we': [
+      ' waited over 35 minutes for our order and the food arrived cold',
+      ' were disappointed with the overall quality and slow response'
+    ],
+    'the': [
+      ' waiting time was quite long and the food arrived lukewarm',
+      ' food quality was below expectations and lacked flavor',
+      ' service was slow and staff seemed indifferent to requests'
+    ],
+    'food': [
+      ' was cold when served and took too long to arrive',
+      ' lacked seasoning and was not freshly prepared'
+    ],
+    'food was': [
+      ' below expectations, cold, and took far too long',
+      ' bland and not prepared with fresh ingredients'
+    ],
+    'pizza was': [
+      ' soggy, underbaked, and had very little cheese',
+      ' cold when it arrived at our table'
+    ],
+    'chicken was': [
+      ' overly greasy and not crispy at all',
+      ' undercooked inside and disappointing'
+    ],
+    'ice cream was': [
+      ' melted by the time it was brought to the table',
+      ' tasted artificial and lacked richness'
+    ],
+    'shake was': [
+      ' very runny and tasted like plain milk with syrup',
+      ' not chilled properly and lacked flavor'
+    ],
+    'service was': [
+      ' extremely slow and unresponsive to our requests',
+      ' disappointing and needs urgent management attention'
+    ],
+    'staff were': [
+      ' unhelpful and ignored our requests multiple times',
+      ' inattentive and showed very little customer care'
+    ],
+    'ambience was': [
+      ' noisy, disorganized, and tables were not cleaned promptly',
+      ' uncomfortable and stuffy'
+    ],
+    'was': [
+      ' below expectations and needs serious improvement',
+      ' delayed, cold, and not worth the price paid'
+    ],
+    'were': [
+      ' disappointed with the service delay and food quality',
+      ' unresponsive when we asked for basic assistance'
+    ],
+    'is': [
+      ' in serious need of better staff training and kitchen management',
+      ' not meeting the standard expected for these prices'
+    ],
+    'are': [
+      ' very slow and need better coordination during peak hours',
+      ' underwhelming in quality and overpriced'
+    ],
+    'highly': [
+      ' disappointed with the lack of attention and slow turnaround',
+      ' suggest management improve food temperature and hygiene'
+    ],
+    'definitely': [
+      ' not returning until service speed and quality are fixed',
+      ' need significant improvements before we consider visiting again'
+    ]
+  }
 };
+// Aliases for 2-star to use tier 1
+RATING_CONTEXT_TRANSITIONS[2] = RATING_CONTEXT_TRANSITIONS[1];
 
 /**
- * Local Prefix Dictionary (FALLBACK)
+ * Rating-Calibrated Prefix Dictionaries
  */
-const PREFIX_DICTIONARY = {
-  'chick': 'en was crispy outside and juicy inside',
-  'fri': 'ed chicken is crunchy, flavorful and cooked to perfection',
-  'pizz': 'as here have a crispy crust and generous cheese toppings',
-  'shake': 's are thick, creamy and rich in flavor',
-  'milk': 'shakes are thick, chilled and absolutely delightful',
-  'ice': ' creams are smooth, rich and have amazing varieties',
-  'crea': 'm More ice cream specials are top notch',
-  'burg': 'er was juicy, loaded and very filling',
-  'tast': 'e is authentic, fresh and full of flavor',
-  'delic': 'ious food with great presentation and hygiene',
-  'crisp': 'y, flavorful and made fresh to order',
-  'cream': 'y, rich and satisfying in every bite',
-  'ambi': 'ence with fairy lights is cozy and peaceful',
-  'atm': 'osphere is warm, lively and perfect for hangouts',
-  'fair': 'y lights create a magical evening hangout vibe',
-  'serv': 'ice was prompt, attentive and friendly',
-  'staf': 'f are welcoming, courteous and fast',
-  'pric': 'es are very affordable and offer great value',
-  'pock': 'et-friendly pricing with generous portions',
-  'hygi': 'enic kitchen and spotless dining area',
-  'clea': 'n, well-maintained and comfortable space',
-  'high': 'ly recommend this place to all food lovers',
-  'def': 'initely coming back with family and friends',
-  'must': ' try their signature dishes and desserts',
-  'amaz': 'ing dining experience with 5-star taste',
-  'fant': 'astic food and wonderful hospitality',
-  'grea': 't taste, fast service and pleasant ambience',
-  'love': 'd every single dish we ordered here',
-  'wond': 'erful evening spent with great food and drinks'
+const RATING_PREFIX_DICTIONARY = {
+  5: {
+    'chick': 'en was crispy outside and juicy inside',
+    'fri': 'ed chicken is crunchy, flavorful and cooked to perfection',
+    'pizz': 'as here have a crispy crust and generous cheese toppings',
+    'shake': 's are thick, creamy and rich in flavor',
+    'milk': 'shakes are thick, chilled and absolutely delightful',
+    'ice': ' creams are smooth, rich and have amazing varieties',
+    'crea': 'm More ice cream specials are top notch',
+    'burg': 'er was juicy, loaded and very filling',
+    'tast': 'e is authentic, fresh and full of flavor',
+    'delic': 'ious food with great presentation and hygiene',
+    'crisp': 'y, flavorful and made fresh to order',
+    'cream': 'y, rich and satisfying in every bite',
+    'ambi': 'ence with fairy lights is cozy and peaceful',
+    'atm': 'osphere is warm, lively and perfect for hangouts',
+    'fair': 'y lights create a magical evening hangout vibe',
+    'serv': 'ice was prompt, attentive and friendly',
+    'staf': 'f are welcoming, courteous and fast',
+    'pric': 'es are very affordable and offer great value',
+    'pock': 'et-friendly pricing with generous portions',
+    'hygi': 'enic kitchen and spotless dining area',
+    'clea': 'n, well-maintained and comfortable space',
+    'high': 'ly recommend this place to all food lovers',
+    'def': 'initely coming back with family and friends',
+    'must': ' try their signature dishes and desserts',
+    'amaz': 'ing dining experience with 5-star taste',
+    'fant': 'astic food and wonderful hospitality',
+    'grea': 't taste, fast service and pleasant ambience',
+    'love': 'd every single dish we ordered here',
+    'wond': 'erful evening spent with great food and drinks'
+  },
+  4: {
+    'chick': 'en was tasty, crispy and well seasoned',
+    'fri': 'ed chicken had good flavor and nice crunch',
+    'pizz': 'a was fresh and tasted good',
+    'shake': 's were thick and nicely flavored',
+    'milk': 'shakes were cold, sweet, and satisfying',
+    'ice': ' cream was smooth with nice choices',
+    'burg': 'er was good and reasonably sized',
+    'tast': 'e was good and well-balanced',
+    'serv': 'ice was good and polite',
+    'staf': 'f were friendly and helpful',
+    'pric': 'ing is fair for the portion size',
+    'clea': 'n and pleasant dining space',
+    'high': 'ly appreciate the friendly service',
+    'def': 'initely a good spot to grab a bite'
+  },
+  3: {
+    'chick': 'en was okay, could be a bit less oily',
+    'fri': 'ed items were standard, nothing special',
+    'pizz': 'a was decent but average toppings',
+    'shake': 's were a bit runny and could be thicker',
+    'ice': ' cream was standard quality',
+    'burg': 'er was average in taste',
+    'tast': 'e was acceptable but has room to improve',
+    'serv': 'ice was standard, could be faster',
+    'staf': 'f were okay but busy',
+    'pric': 'es are slightly on the higher side for what you get',
+    'wait': 'ing time was slightly long',
+    'aver': 'age experience overall'
+  },
+  1: {
+    'chick': 'en was undercooked and overly greasy',
+    'fri': 'ed food was cold and not crispy',
+    'pizz': 'a was soggy and lacked toppings',
+    'shake': 's were watery and warm',
+    'ice': ' cream was melted and artificial',
+    'burg': 'er was cold and dry',
+    'tast': 'e was disappointing and lacked freshness',
+    'serv': 'ice was extremely slow and unhelpful',
+    'staf': 'f were inattentive and ignored our table',
+    'pric': 'es are not justified given the poor quality',
+    'wait': 'ing time was over 30 minutes for a simple order',
+    'disa': 'ppointed with the whole experience',
+    'poor': ' service and lukewarm food'
+  }
 };
+RATING_PREFIX_DICTIONARY[2] = RATING_PREFIX_DICTIONARY[1];
+
+/**
+ * Rating-Calibrated Adjective Maps
+ */
+const RATING_ADJECTIVE_MAP = {
+  5: {
+    'very': ' tasty, fresh, and served with a welcoming smile',
+    'super': ' crispy on the outside, juicy inside, and full of flavor',
+    'so': ' creamy, rich, and made with fresh ingredients',
+    'extremely': ' polite staff and prompt service throughout',
+    'really': ' enjoyed the peaceful ambience and delicious snacks',
+    'truly': ' an exceptional experience from start to finish',
+    'best': ' spot in town for desserts, pizzas, and crispy chicken',
+    'great': ' taste, generous portions, and pocket-friendly pricing',
+    'nice': ' fairy light ambience and great music in the background',
+    'clean': ' seating area with high hygiene standards',
+    'fresh': ' ingredients that make every dish taste authentic'
+  },
+  4: {
+    'very': ' good food, nicely seasoned and served fresh',
+    'super': ' friendly staff and quick turnaround',
+    'so': ' tasty and satisfying for the price',
+    'really': ' liked the pleasant vibe and food quality',
+    'great': ' value for money and good portions',
+    'nice': ' atmosphere and clean dining tables',
+    'fresh': ' taste and good presentation'
+  },
+  3: {
+    'very': ' average taste and ordinary presentation',
+    'quite': ' standard and could be improved',
+    'fairly': ' decent, but nothing memorable',
+    'somewhat': ' slow during peak hours',
+    'moderately': ' good, but expected slightly better'
+  },
+  1: {
+    'very': ' slow service and disappointing food quality',
+    'too': ' slow, cold, and overpriced for what was offered',
+    'extremely': ' unhappy with the long delay and cold food',
+    'quite': ' disappointing from start to finish',
+    'terribly': ' slow service and inattentive staff',
+    'really': ' bad experience with delayed orders and cold food'
+  }
+};
+RATING_ADJECTIVE_MAP[2] = RATING_ADJECTIVE_MAP[1];
+
+const RATING_FALLBACKS = {
+  5: {
+    primary: 'is fresh, delicious, and worth visiting again',
+    alternatives: [
+      'and the staff were very polite and attentive',
+      'with great portions and affordable pricing',
+      'highly recommended to everyone!'
+    ]
+  },
+  4: {
+    primary: 'was really good and we had a pleasant visit',
+    alternatives: [
+      'and the food was prepared nicely',
+      'with good service and reasonable prices',
+      'a good option for a casual meal'
+    ]
+  },
+  3: {
+    primary: 'was okay, but there is room for improvement in speed and taste',
+    alternatives: [
+      'though service could be a bit faster',
+      'decent for a quick bite but nothing special',
+      'hope they improve food consistency'
+    ]
+  },
+  1: {
+    primary: 'was below expectations and needs urgent improvement in service and quality',
+    alternatives: [
+      'due to excessive waiting time and cold food',
+      'and staff need to be much more responsive',
+      'quite disappointed with our visit'
+    ]
+  }
+};
+RATING_FALLBACKS[2] = RATING_FALLBACKS[1];
 
 /**
  * Extract Business Persona & Domain Profile
@@ -245,7 +572,7 @@ async function suggestNextWords({ text = '', rating = 5, slug = '', client = nul
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
   const businessType = client ? (client.category || client.business_name) : '';
 
-  // 1. Calculate local instant prediction immediately (<5ms)
+  // 1. Calculate local instant prediction immediately (<5ms) calibrated to star rating
   const localResult = localSuggestNextWords(text, r);
 
   // 2. If Gemini is available, attempt fast 350ms race
@@ -269,37 +596,43 @@ async function suggestNextWords({ text = '', rating = 5, slug = '', client = nul
   return localResult;
 }
 
-function localSuggestNextWords(text, r) {
+function localSuggestNextWords(text, r = 5) {
+  const tier = Math.max(1, Math.min(5, parseInt(r) || 5));
+  const transitions = RATING_CONTEXT_TRANSITIONS[tier] || RATING_CONTEXT_TRANSITIONS[5];
+  const prefixes = RATING_PREFIX_DICTIONARY[tier] || RATING_PREFIX_DICTIONARY[5];
+  const adjMap = RATING_ADJECTIVE_MAP[tier] || RATING_ADJECTIVE_MAP[5];
+  const fallback = RATING_FALLBACKS[tier] || RATING_FALLBACKS[5];
+
   const raw = text.toLowerCase();
   const trimmed = raw.trim();
   const words = trimmed.split(/\s+/);
   const lastWord = words[words.length - 1];
 
   // 1. Partial Word Match
-  if (lastWord.length >= 3 && PREFIX_DICTIONARY[lastWord]) {
-    const completion = PREFIX_DICTIONARY[lastWord];
+  if (lastWord.length >= 3 && prefixes[lastWord]) {
+    const completion = prefixes[lastWord];
     return {
       primary: completion,
       alternatives: [
         ' ' + completion,
-        ' and wonderful hospitality throughout',
-        ' — thoroughly enjoyed our visit!'
+        tier >= 4 ? ' and wonderful hospitality throughout' : ' and service needs improvement',
+        tier >= 4 ? ' — thoroughly enjoyed our visit!' : ' — quite disappointed with the visit'
       ]
     };
   }
 
-  for (const [prefix, completion] of Object.entries(PREFIX_DICTIONARY)) {
+  for (const [prefix, completion] of Object.entries(prefixes)) {
     if (lastWord.length >= 3 && lastWord.startsWith(prefix)) {
       const rest = completion.replace(new RegExp(`^${lastWord.slice(prefix.length)}`, 'i'), '');
       return {
         primary: rest,
-        alternatives: [' ' + completion, ' with great quality and taste']
+        alternatives: [' ' + completion, tier >= 4 ? ' with great quality and taste' : ' but quality was lacking']
       };
     }
   }
 
-  // 2. Context transition match
-  for (const [trigger, continuations] of Object.entries(CONTEXT_TRANSITIONS)) {
+  // 2. Context transition match (multi-word ending matches prioritized)
+  for (const [trigger, continuations] of Object.entries(transitions)) {
     if (trimmed.endsWith(trigger)) {
       const chosen = continuations[Math.floor(Math.random() * continuations.length)];
       return {
@@ -311,12 +644,20 @@ function localSuggestNextWords(text, r) {
 
   // 3. Punctuation bridge
   if (trimmed.endsWith('.') || trimmed.endsWith('!') || trimmed.endsWith(',')) {
-    const bridges = [
+    const bridges = tier >= 4 ? [
       ' Also, the service was lightning fast and courteous.',
       ' In addition, the ambience with fairy lights was wonderful.',
       ' Highly recommended to anyone looking for great taste and hygiene!',
       ' Definitely coming back again with friends soon.'
-    ];
+    ] : (tier === 3 ? [
+      ' Also, service could be a bit quicker during busy hours.',
+      ' In addition, portion sizes could be slightly more generous.',
+      ' Overall an average experience with room for improvement.'
+    ] : [
+      ' Also, the staff were unresponsive when we asked for help.',
+      ' In addition, the waiting time was far too long.',
+      ' Hope management takes note and fixes these service delays.'
+    ]);
     return {
       primary: bridges[Math.floor(Math.random() * bridges.length)],
       alternatives: bridges
@@ -324,40 +665,19 @@ function localSuggestNextWords(text, r) {
   }
 
   // 4. Adjective map
-  const ADJECTIVE_MAP = {
-    'very': ' tasty, fresh, and served with a welcoming smile',
-    'super': ' crispy on the outside, juicy inside, and full of flavor',
-    'so': ' creamy, rich, and made with fresh ingredients',
-    'extremely': ' polite staff and prompt service throughout',
-    'really': ' enjoyed the peaceful ambience and delicious snacks',
-    'truly': ' an exceptional experience from start to finish',
-    'best': ' spot in town for desserts, pizzas, and crispy chicken',
-    'great': ' taste, generous portions, and pocket-friendly pricing',
-    'nice': ' fairy light ambience and great music in the background',
-    'clean': ' seating area with high hygiene standards',
-    'fresh': ' ingredients that make every dish taste authentic'
-  };
-
-  if (ADJECTIVE_MAP[lastWord]) {
+  if (adjMap[lastWord]) {
     return {
-      primary: ' ' + ADJECTIVE_MAP[lastWord],
+      primary: ' ' + adjMap[lastWord],
       alternatives: [
-        ' and delicious in every single bite',
-        ' with top-tier presentation and taste',
-        ' — completely exceeded all our expectations'
+        tier >= 4 ? ' and delicious in every single bite' : ' and below what we expected',
+        tier >= 4 ? ' with top-tier presentation and taste' : ' with slow and inattentive service',
+        tier >= 4 ? ' — completely exceeded all our expectations' : ' — needs significant improvement'
       ]
     };
   }
 
   // 5. General fallback
-  return {
-    primary: 'is fresh, delicious, and worth visiting again',
-    alternatives: [
-      'and the staff were very polite and attentive',
-      'with great portions and affordable pricing',
-      'highly recommended to everyone!'
-    ]
-  };
+  return fallback;
 }
 
 
