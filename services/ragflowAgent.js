@@ -687,15 +687,14 @@ async function generateTagsWithNvidia({ rating = 5, businessName = '', businessT
   const nvidiaBase = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
   const nvidiaModel = process.env.NVIDIA_MODEL || 'deepseek-ai/deepseek-v4-flash-0731';
 
-  const prompt = `Generate ${limit} clickable quick review tags for a Google review writing assistant:
+  const prompt = `Generate ${limit} clickable quick review topic tags for a Google review writing assistant:
 - Business: ${businessName || 'Local Business'}
 - Category: ${businessType || category || 'Restaurant'}
 - Rating: ${rating} out of 5 stars
 
 Output ONLY a valid JSON array of objects with:
-- "l": Short label with appropriate emoji (max 25 chars)
-- "t": Natural review sentence (15-25 words) matching the ${rating}-star tone.
-Example: [{"l":"🍕 Cheesy pizza","t":"The pizzas are freshly baked with a golden crispy crust and loaded with cheese."}]`;
+- "l": Short label with appropriate emoji (max 22 chars)
+Example: [{"l":"🍗 Crispy Chicken"},{"l":"🍟 Peri Peri Fries"},{"l":"⚡ Fast Service"}]`;
 
   try {
     const resp = await fetch(nvidiaBase.replace(/\/$/, '') + '/chat/completions', {
@@ -712,7 +711,7 @@ Example: [{"l":"🍕 Cheesy pizza","t":"The pizzas are freshly baked with a gold
           { role: 'user', content: prompt }
         ],
         temperature: 0.8,
-        max_tokens: 600
+        max_tokens: 140
       })
     });
     if (!resp.ok) return null;
@@ -721,9 +720,16 @@ Example: [{"l":"🍕 Cheesy pizza","t":"The pizzas are freshly baked with a gold
     const raw = choice?.content || choice?.reasoning_content || '';
     const jsonStr = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
     const parsed = JSON.parse(jsonStr);
-    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].l && parsed[0].t) {
-      console.log('[getTagsForRating] Dynamic tags generated via NVIDIA AI Brain ✓');
-      return parsed.slice(0, limit);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const normalized = parsed.map(item => {
+        if (typeof item === 'string') return { l: item };
+        if (item && item.l) return { l: item.l };
+        return null;
+      }).filter(Boolean);
+      if (normalized.length > 0) {
+        console.log('[getTagsForRating] Dynamic tags generated via NVIDIA AI Brain ✓');
+        return normalized.slice(0, limit);
+      }
     }
   } catch (e) {
     console.warn('[getTagsForRating] NVIDIA tag generation failed:', e.message);
@@ -731,10 +737,20 @@ Example: [{"l":"🍕 Cheesy pizza","t":"The pizzas are freshly baked with a gold
   return null;
 }
 
+const dynamicTagsCache = new Map();
+const TAGS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
 async function getTagsForRating(rating = 5, limit = 8, client = null) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
+  const slug = client ? client.slug : 'default';
   const bizName = client ? client.business_name : '';
   const bizType = client ? (client.category || client.description) : '';
+  const cacheKey = `${slug}:${r}:${limit}`;
+
+  const cached = dynamicTagsCache.get(cacheKey);
+  if (cached && Date.now() - cached.time < TAGS_CACHE_TTL) {
+    return cached.tags;
+  }
 
   // 1. Try Gemini AI Brain
   if (isGeminiAvailable() && client) {
@@ -747,6 +763,7 @@ async function getTagsForRating(rating = 5, limit = 8, client = null) {
         limit,
       });
       if (tags && tags.length > 0) {
+        dynamicTagsCache.set(cacheKey, { time: Date.now(), tags });
         return tags;
       }
     } catch (e) {
@@ -764,13 +781,24 @@ async function getTagsForRating(rating = 5, limit = 8, client = null) {
       limit
     });
     if (nvidiaTags && nvidiaTags.length > 0) {
+      dynamicTagsCache.set(cacheKey, { time: Date.now(), tags: nvidiaTags });
       return nvidiaTags;
     }
   } catch (e) {
     console.warn('[getTagsForRating] NVIDIA tags fallback:', e.message);
   }
 
-  // 3. Local fallback tags
+  // 3. Fallback to client configured seed tags
+  if (client && client.tags) {
+    try {
+      const parsed = JSON.parse(client.tags);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.slice(0, limit);
+      }
+    } catch (e) {}
+  }
+
+  // 4. Local fallback tags
   return localGetTagsForRating(r, limit);
 }
 

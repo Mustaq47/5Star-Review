@@ -759,7 +759,12 @@ function fetchTagsForRating(v) {
       if (data.ok && data.tags) {
         CURRENT_TAGS = data.tags;
         activeTags.clear();
+        const ta = document.getElementById('ta');
+        if (ta) ta.value = '';
         renderTags();
+        updateMirror();
+        syncScroll();
+        updateButtonProgression();
       }
     })
     .catch(() => {
@@ -819,50 +824,101 @@ function updateButtonProgression() {
   }
 }
 
-const tagSentenceMap = new Map();
+const tagComboCache = new Map();
+let tagDebounceTimer = null;
+let tagReqSeq = 0;
 
 function toggleTag(label) {
   const ta = document.getElementById('ta');
-  const tagObj = CURRENT_TAGS.find(t => t.l === label) || { l: label, t: label };
-  const sentence = (tagObj.t || tagObj.l || label).trim();
-
   if (activeTags.has(label)) {
-    // Deselect tag: remove this tag's sentence from textarea if it was inserted
     activeTags.delete(label);
-    if (ta && tagSentenceMap.has(label)) {
-      const sentToRemove = tagSentenceMap.get(label);
-      let cur = ta.value;
-      cur = cur.replace(sentToRemove, '').replace(/\s{2,}/g, ' ').trim();
-      ta.value = cur;
-      tagSentenceMap.delete(label);
-    }
   } else {
-    // Select tag: add to activeTags and intelligently append sentence to existing review text
     activeTags.add(label);
-    tagSentenceMap.set(label, sentence);
-    if (ta) {
-      const cur = ta.value.trim();
-      if (!cur) {
-        ta.value = sentence;
-      } else {
-        if (!cur.includes(sentence)) {
-          const needsDot = !cur.endsWith('.') && !cur.endsWith('!') && !cur.endsWith('?') && !cur.endsWith(',');
-          ta.value = cur + (needsDot ? '. ' : ' ') + sentence;
-        }
-      }
-    }
   }
 
   renderTags();
   clrS();
-  updateMirror();
-  syncScroll();
-  updateButtonProgression();
+
+  if (activeTags.size === 0) {
+    if (ta) ta.value = '';
+    updateMirror();
+    syncScroll();
+    updateButtonProgression();
+    return;
+  }
+
+  const selectedList = Array.from(activeTags);
+  const cacheKey = selectedList.slice().sort().join('|') + '::' + rating;
+
+  // 1. Check local session cache for instant 0-token, 0ms hit
+  if (tagComboCache.has(cacheKey)) {
+    if (ta) {
+      ta.value = tagComboCache.get(cacheKey);
+      updateMirror();
+      syncScroll();
+      updateButtonProgression();
+    }
+    return;
+  }
+
+  // 2. Debounce AI call by 200ms to batch rapid multi-tag clicks
+  clearTimeout(tagDebounceTimer);
+  const currentSeq = ++tagReqSeq;
+
+  tagDebounceTimer = setTimeout(() => {
+    fetch('/r/' + SLUG + '/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rating: rating,
+        tags: selectedList,
+        previousText: ''
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (currentSeq !== tagReqSeq) return; // ignore stale response
+      if (data.ok && data.review && ta) {
+        tagComboCache.set(cacheKey, data.review);
+        ta.value = data.review;
+        updateMirror();
+        syncScroll();
+        updateButtonProgression();
+      }
+    })
+    .catch(err => {
+      console.warn('AI review generation failed:', err);
+    });
+  }, 200);
 }
 
 function regenerateReview() {
-  toast('Generating fresh review variation...');
-  triggerAgentGeneration();
+  const selectedList = Array.from(activeTags);
+  const cacheKey = selectedList.slice().sort().join('|') + '::' + rating;
+  tagComboCache.delete(cacheKey);
+  toast('Brain composing new sentence...');
+  
+  fetch('/r/' + SLUG + '/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      rating: rating,
+      tags: selectedList.length > 0 ? selectedList : ['overall experience'],
+      previousText: ''
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    const ta = document.getElementById('ta');
+    if (data.ok && data.review && ta) {
+      tagComboCache.set(cacheKey, data.review);
+      ta.value = data.review;
+      updateMirror();
+      syncScroll();
+      updateButtonProgression();
+    }
+  })
+  .catch(() => {});
 }
 
 function syncScroll() {

@@ -97,7 +97,7 @@ async function callChat(apiBase, apiKey, model, messages) {
       'Authorization': 'Bearer ' + apiKey,
       'Accept': 'application/json'
     },
-    body: JSON.stringify({ model, messages, temperature: 0.8, max_tokens: 350 })
+    body: JSON.stringify({ model, messages, temperature: 0.8, max_tokens: 90 })
   });
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '');

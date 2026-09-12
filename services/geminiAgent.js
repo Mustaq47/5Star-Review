@@ -182,7 +182,7 @@ async function suggestWithGemini({ text, rating = 5, businessName = '', business
 //  CORE: Gemini API caller
 // ═══════════════════════════════════════════════════════════════
 
-async function callGemini(prompt, { temperature = 0.95, maxTokens = 800, systemInstruction = '' } = {}) {
+async function callGemini(prompt, { temperature = 0.95, maxTokens = 120, systemInstruction = '' } = {}) {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set');
 
   const url = `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
@@ -190,7 +190,7 @@ async function callGemini(prompt, { temperature = 0.95, maxTokens = 800, systemI
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       temperature,
-      maxOutputTokens: Math.max(maxTokens, 800),
+      maxOutputTokens: Math.max(16, Math.min(maxTokens, 1024)),
       topP: 0.95,
       thinkingConfig: { thinkingBudget: 0 }
     },
@@ -346,57 +346,48 @@ function learnFromCompletion(slug, partialText, chosenCompletion) {
 //  1. REVIEW GENERATION WITH MEMORY & UNIQUENESS
 // ═══════════════════════════════════════════════════════════════
 
-const REVIEW_SYSTEM_PROMPT = `You are an expert Google review writer. You write short, natural, human-sounding Google reviews (2-4 sentences) in English.
+const REVIEW_SYSTEM_PROMPT = `You are an expert Google review writer. You write short, natural, human-sounding Google reviews (1-3 sentences) in English.
 
 RULES:
-- Write ONLY in first-person ("I"/"we"), as an actual customer.
-- Use ONLY details from what the user provides. Never invent dishes, staff names, prices, or specifics not mentioned.
-- NEVER write a negative review. For low ratings (1-2 stars), reframe constructively.
-- No emojis, no hashtags, no mentioning AI.
-- Vary wording every single time — never repeat the same sentence structure.
-- Match tone to the rating: 5★ = enthusiastic, 4★ = warm, 3★ = balanced, 1-2★ = constructive.
-- Keep it to 2-4 sentences total.
-- Make each review genuinely unique in structure, vocabulary, and flow.`;
+- Write in first-person ("I"/"we"), as a real customer.
+- When tags/aspects are selected, weave ALL of them smoothly and naturally into one cohesive review.
+- Never write harsh or negative reviews. For low ratings (1-2 stars), reframe constructively.
+- No emojis, no hashtags, no meta text or quotation marks.
+- Keep it concise (20-45 words).`;
 
-function uniqueSeed() {
-  return `[Var:${Date.now()}-${Math.random().toString(36).slice(2, 6)}]`;
-}
+const reviewCache = new Map();
+const REVIEW_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
 async function generateReviewWithGemini({ rating = 5, businessName, businessType, userText, tags = [], clientId } = {}) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
-  const starLabels = ['1 star', '2 stars', '3 stars', '4 stars', '5 stars'];
+  const tagList = Array.isArray(tags) ? tags.map(t => typeof t === 'object' ? (t.l || '') : String(t)).filter(Boolean) : [];
+  const cacheKey = `${businessName || 'biz'}:${r}:${tagList.slice().sort().join('+')}:${(userText || '').trim()}`;
 
-  const tagContext = tags.length > 0 ? `\nHighlighted aspects: ${tags.join(', ')}` : '';
-  const userContext = userText ? `\nCustomer notes: ${userText}` : '';
-
-  // Check for similar past reviews to avoid repetition
-  let similarContext = '';
-  if (clientId) {
-    const tempReview = `temp review for ${businessName}`;
-    const similar = await findSimilarReviews(clientId, tempReview, r);
-    if (similar.length > 0) {
-      similarContext = `\n\nIMPORTANT: Avoid these recently-used phrasings:\n- ${similar.slice(0, 3).join('\n- ')}`;
-    }
+  const cached = reviewCache.get(cacheKey);
+  if (cached && Date.now() - cached.time < REVIEW_CACHE_TTL) {
+    return cached.review;
   }
 
-  const prompt = `${uniqueSeed()}
-Write a unique Google review:
-- Rating: ${starLabels[r - 1]}
-- Business: ${businessName || '(not provided)'}
-- Type: ${businessType || '(not provided)'}${tagContext}${userContext}${similarContext}
+  const aspects = tagList.length > 0 ? `Selected aspects to mention together: ${tagList.join(', ')}.` : '';
+  const notes = userText ? `Customer notes: "${userText}".` : '';
 
-2-4 natural sentences, unique wording, no emojis. Output the review only.`;
+  const prompt = `Write a short 1-2 sentence Google review for ${businessName || 'this business'} (${businessType || 'business'}). Rating: ${r} stars. ${aspects} ${notes} Output review text only.`;
 
   let review = await callGemini(prompt, {
-    temperature: 0.85,
-    maxTokens: 200,
+    temperature: 0.7,
+    maxTokens: 80,
     systemInstruction: REVIEW_SYSTEM_PROMPT,
   });
 
   review = review.replace(/^["']|["']$/g, '').replace(/[\u{1F600}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|#\w+/gu, '').trim();
 
+  if (review && review.length > 15) {
+    reviewCache.set(cacheKey, { time: Date.now(), review });
+    if (reviewCache.size > 100) reviewCache.delete(reviewCache.keys().next().value);
+  }
+
   if (clientId) {
-    await storeReviewMemory(clientId, r, tags, review);
+    storeReviewMemory(clientId, r, tagList, review).catch(() => {});
   }
 
   return review;
@@ -406,17 +397,10 @@ Write a unique Google review:
 //  2. DYNAMIC TAG GENERATION (SMART + LEARNED)
 // ═══════════════════════════════════════════════════════════════
 
-const TAG_SYSTEM_PROMPT = `You generate clickable "quick tag" buttons for a Google review writing assistant.
-
-Output format: JSON array of objects with "l" (label with emoji, max 25 chars) and "t" (natural review sentence, 15-25 words).
-
-Rules:
--- Valid JSON only, nothing else.
--- Tags relevant to the business type.
--- Rating 4-5: enthusiastic positive tags.
--- Rating 3: balanced tags.
--- Rating 1-2: constructive/neutral tags.
--- Each "t" must be unique and natural.`;
+const TAG_SYSTEM_PROMPT = `Generate ${8} short clickable review topic tags for a Google review assistant.
+Output format: JSON array of objects with "l" (label with emoji, max 22 chars).
+Example: [{"l":"🍗 Crispy Chicken"},{"l":"🍟 Peri Peri Fries"},{"l":"⚡ Quick Service"}]
+Valid JSON only.`;
 
 async function generateTagsWithGemini({ rating = 5, businessName, businessType, category, limit = 8, clientId } = {}) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
@@ -426,29 +410,30 @@ async function generateTagsWithGemini({ rating = 5, businessName, businessType, 
     const learned = await getLearnedTags(clientId);
     const themes = await getEmergingThemes(clientId);
     if (learned.length > 0 || themes.length > 0) {
-      learnedContext = `\n\nBusiness-specific context (use these patterns if relevant):\n- Common positive aspects: ${learned.slice(0, 5).join(', ')}\n- Recently praised: ${themes.slice(0, 3).join(', ')}`;
+      learnedContext = `\nContext: ${[...learned.slice(0, 3), ...themes.slice(0, 2)].join(', ')}`;
     }
   }
 
   const prompt = `${uniqueSeed()}
-Generate ${limit} quick review tags for:
-- Business: ${businessName || 'a local business'}
-- Type: ${businessType || category || 'restaurant'}
-- Rating: ${r} stars${learnedContext}
-
-Output ONLY valid JSON array with "l" (emoji + short label) and "t" (natural sentence).`;
+Generate ${limit} quick review topic tags for ${businessName || 'a local business'} (${businessType || category || 'restaurant'}), ${r} stars rating.${learnedContext}
+Output JSON array with "l" key only.`;
 
   const raw = await callGemini(prompt, {
-    temperature: 0.9,
-    maxTokens: 600,
+    temperature: 0.8,
+    maxTokens: 140,
     systemInstruction: TAG_SYSTEM_PROMPT,
   });
 
   const jsonStr = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
   try {
-    const tags = JSON.parse(jsonStr);
-    if (Array.isArray(tags) && tags.length > 0 && tags[0].l && tags[0].t) {
-      return tags.slice(0, limit);
+    const parsed = JSON.parse(jsonStr);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const normalized = parsed.map(item => {
+        if (typeof item === 'string') return { l: item };
+        if (item && item.l) return { l: item.l };
+        return null;
+      }).filter(Boolean);
+      if (normalized.length > 0) return normalized.slice(0, limit);
     }
   } catch (e) {
     console.warn('[geminiAgent] Tag parse failed:', raw.slice(0, 100));
