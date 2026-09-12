@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db/setup');
-const { getTagsForRating, generateReview, suggestNextWords } = require('../services/ragflowAgent');
+const { getTagsForRating, generateReview, suggestNextWordsAsync } = require('../services/ragflowAgent');
+const { generateReviewWithAgent } = require('../services/reviewWriterAgent');
 const router = express.Router();
 
 router.get('/:slug', async (req, res) => {
@@ -23,14 +24,27 @@ router.get('/:slug/tags', async (req, res) => {
   }
 });
 
-// RAGFlow Agent Review Generator API (Zero repetition with huge context)
+// RAGFlow Agent Review Generator API
 router.post('/:slug/generate', async (req, res) => {
   const { rating, tags, previousText } = req.body;
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  const ratingNum = parseInt(rating) || 5;
   try {
+    if (client) {
+      const agentResult = await generateReviewWithAgent({
+        rating: String(ratingNum),
+        businessName: client.business_name,
+        businessType: client.category,
+        userText: previousText || ''
+      });
+      if (agentResult && agentResult.source !== 'local') {
+        res.json({ ok: true, review: agentResult.review });
+        return;
+      }
+    }
     const review = await generateReview({
       slug: req.params.slug,
-      rating: parseInt(rating) || 5,
+      rating: ratingNum,
       tags: Array.isArray(tags) ? tags : [],
       previousText: previousText || '',
       client
@@ -41,20 +55,32 @@ router.post('/:slug/generate', async (req, res) => {
   }
 });
 
-// RAGFlow Agent Next-Word Prediction API (now Gemini-powered)
+// RAGFlow / Gemini Next-Word Prediction API
 router.post('/:slug/suggest', async (req, res) => {
   const { text, rating } = req.body;
-  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  const suggestion = await suggestNextWordsAsync({
+    text: text || '',
+    rating: parseInt(rating) || 5,
+    slug: req.params.slug
+  });
+  res.json({ ok: true, suggestion });
+});
+
+// Poll endpoint: returns the cached/best Gemini result once ready.
+router.post('/:slug/suggest/enhance', async (req, res) => {
+  const { text, rating } = req.body;
+  const input = {
+    text: (text || '').trim(),
+    rating: parseInt(rating) || 5,
+    slug: req.params.slug
+  };
+  if (!input.text) return res.json({ ok: true, ready: false });
   try {
-    const suggestion = await suggestNextWords({
-      text: text || '',
-      rating: parseInt(rating) || 5,
-      slug: req.params.slug,
-      client
-    });
-    res.json({ ok: true, suggestion });
-  } catch (err) {
-    res.json({ ok: true, suggestion: { primary: '', alternatives: [] } });
+    const suggestion = await suggestNextWordsAsync({ ...input, poll: true });
+    const ready = suggestion.enhancing === false;
+    res.json({ ok: true, ready, suggestion });
+  } catch (e) {
+    res.json({ ok: true, ready: false });
   }
 });
 
@@ -309,6 +335,18 @@ ${isCoolSpicy ? `
 .root.dark  .tab-hint{background:rgba(14,165,233,0.18);color:#bae6fd;border:1px solid rgba(56,189,248,0.3)}
 .tab-hint:hover{transform:scale(1.03)}
 
+.alts{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:6px;}
+.alt-chip{
+  font-size:11px;font-family:'DM Mono',monospace;padding:3px 8px;border-radius:8px;
+  cursor:pointer;border:1px solid transparent;transition:all .2s;
+  background:rgba(14,165,233,0.10);color:#0284c7;
+  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.root.dark  .alt-chip{color:#7dd3fc;background:rgba(56,189,248,0.10);border-color:rgba(56,189,248,0.18)}
+.root.light .alt-chip{border-color:rgba(2,132,199,0.22)}
+.alt-chip:hover{transform:translateY(-1px);}
+.alt-chip:active{transform:translateY(0);}
+
 /* ── SECTION LABEL ── */
 .sl{
   display:flex;align-items:center;justify-content:space-between;
@@ -533,8 +571,7 @@ ${isCoolSpicy ? `
           <div class="tab-hint" id="tabHint" onclick="acceptSuggestion()">
             <span>Tab ⇥</span>
           </div>
-        </div>
-
+        <div class="alts" id="alts"></div>
         <div class="sl">Quick tags</div>
         <div class="tags" id="tags"></div>
 
@@ -587,6 +624,7 @@ const PLACE_ID = '${esc(client.place_id)}';
 const SLUG     = '${esc(client.slug)}';
 
 let dark=false, rating=5, sugg='', sgT=null, activeTags=new Set();
+let sugGen = 0; // guard against stale async suggestions overwriting newer text
 
 function esc(s) {
   if (!s) return '';
@@ -805,6 +843,60 @@ function updateMirror() {
   mirror.scrollTop = ta.scrollTop;
 }
 
+function pollSuggestionEnhance(text, rating, attempt, gen) {
+  // Ignore stale polls if the user has typed new text since this poll began.
+  if (gen !== sugGen) return;
+  // Refresh the badge to hint the smarter result is still on its way.
+  const th = document.getElementById('th');
+  if (th && attempt === 0) {
+    th.innerHTML = '<span class="th-badge">⚡ Enhancing with Gemini…</span> <span style="opacity:0.6;font-size:10px">giving even better suggestions</span>';
+  }
+  if (attempt > 8) return; // ~6s max: 8 × 800ms
+
+  setTimeout(() => {
+    if (gen !== sugGen) return;
+    fetch('/r/' + SLUG + '/suggest/enhance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, rating })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (gen !== sugGen || !data.ok) return;
+      if (data.ready && data.suggestion) {
+        applySuggestion(data.suggestion);
+      } else {
+        pollSuggestionEnhance(text, rating, attempt + 1, gen);
+      }
+    })
+    .catch(() => {
+      pollSuggestionEnhance(text, rating, attempt + 1, gen);
+    });
+  }, attempt === 0 ? 1200 : 800);
+}
+
+function applySuggestion(suggestion) {
+  const prim = typeof suggestion === 'string' ? suggestion : suggestion.primary;
+  const alts = suggestion.alternatives || [];
+  sugg = prim || '';
+  currentAlts = alts;
+  const ta = document.getElementById('ta');
+  if (!ta) return;
+
+  if (sugg) {
+    document.getElementById('th').innerHTML =
+      '<span class="th-badge">⚡ Gemini Suggestion</span> <span style="opacity:0.9">' + esc(sugg) + '</span> <span style="opacity:0.6;font-size:10px">(Tab or tap to complete)</span>';
+    document.getElementById('ghost').innerHTML =
+      esc(ta.value) + '<span class="gs">' + esc(sugg) + '</span>';
+  }
+  const altRow = document.getElementById('alts');
+  if (altRow) {
+    altRow.innerHTML = currentAlts.map(alt =>
+      '<span class="alt-chip" title="Click to use this sentence" onclick="acceptSuggestion(' + JSON.stringify(alt) + ')">' + esc(alt) + '</span>'
+    ).join('');
+  }
+}
+
 function onTA() {
   const ta = document.getElementById('ta');
   const v = ta.value;
@@ -817,6 +909,7 @@ function onTA() {
   clrS();
 
   clearTimeout(sgT);
+  const myGen = ++sugGen;
   sgT = setTimeout(() => {
     fetch('/r/' + SLUG + '/suggest', {
       method: 'POST',
@@ -829,16 +922,30 @@ function onTA() {
         const prim = typeof data.suggestion === 'string' ? data.suggestion : data.suggestion.primary;
         sugg = (prim || '').trim();
         updateMirror();
+
+        const alts = (data.suggestion && data.suggestion.alternatives) ? data.suggestion.alternatives : [];
+        const altRow = document.getElementById('alts');
+        if (altRow) {
+          altRow.innerHTML = alts.map(alt =>
+            '<span class="alt-chip" title="Click to use this sentence" onclick="acceptSuggestion(' + JSON.stringify(alt) + ')">' + esc(alt) + '</span>'
+          ).join('');
+        }
+
+        // If the server is still enhancing with Gemini, poll for the upgraded result.
+        if (data.suggestion && data.suggestion.enhancing) {
+          pollSuggestionEnhance(v, rating, 0, myGen);
+        }
       }
     })
     .catch(() => {});
   }, 100);
 }
 
-function acceptSuggestion() {
-  if (sugg) {
+function acceptSuggestion(customText) {
+  const toAdd = typeof customText === 'string' ? customText : sugg;
+  if (toAdd) {
     const ta = document.getElementById('ta');
-    const cleanAdd = sugg.trim();
+    const cleanAdd = toAdd.trim();
     const needsSpace = ta.value.length > 0 && !ta.value.endsWith(' ') && !cleanAdd.startsWith(' ');
     ta.value += (needsSpace ? ' ' : '') + cleanAdd + ' ';
     clrS();
@@ -859,6 +966,8 @@ function clrS() {
   clearTimeout(sgT);
   sugg = '';
   updateMirror();
+  const a = document.getElementById('alts');
+  if (a) a.innerHTML = '';
 }
 
 function buildPreview() {

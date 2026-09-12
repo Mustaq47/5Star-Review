@@ -12,8 +12,6 @@ const RAGFLOW_API_KEY = process.env.RAGFLOW_API_KEY || '';
 const RAGFLOW_AGENT_ID = process.env.RAGFLOW_AGENT_ID || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_BASE = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-
 // Gemini Agent import
 const { generateReviewWithGemini, isGeminiAvailable } = require('./geminiAgent');
 
@@ -149,7 +147,7 @@ async function generateReviewWithAgent(inputs) {
   }
 
   // 2. Gemini LLM agent (free, high quality).
-  if (isGeminiAvailable()) {
+  if (isGeminiAvailable && isGeminiAvailable()) {
     try {
       const review = await generateReviewWithGemini({
         rating,

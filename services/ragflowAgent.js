@@ -10,6 +10,8 @@ const {
 } = require('./geminiAgent');
 
 const RAGFLOW_API_URL = process.env.RAGFLOW_API_URL || 'http://localhost:9380/api/v1';
+const { suggestWithGemini, getSuggestedSuggestion, isEnhancing } = require('./geminiAgent');
+
 const RAGFLOW_API_KEY = process.env.RAGFLOW_API_KEY || '';
 const RAGFLOW_AGENT_ID = process.env.RAGFLOW_AGENT_ID || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
@@ -523,5 +525,55 @@ async function generateReview({ slug, rating = 5, tags = [], previousText = '', 
 module.exports = {
   getTagsForRating,
   generateReview,
-  suggestNextWords
+  suggestNextWords,
+  suggestNextWordsAsync
 };
+
+/**
+ * Gemini-enhanced next-phrase prediction.
+ * - When a Gemini result is already cached, returns it instantly (source:gemini).
+ * - Otherwise returns the static continuation immediately and signals
+ *   `enhancing:true` so the client can poll for the smarter result.
+ * - Never throws: any Gemini issue falls back to the static engine.
+ */
+async function suggestNextWordsAsync({ text = '', rating = 5, slug = '' }) {
+  // Empty text keeps the friendly static default (no live API call needed).
+  if (!text || !text.trim()) {
+    return { source: 'static', enhancing: false, ...suggestNextWords({ text: '', rating, slug }) };
+  }
+
+  const input = {
+    text: text.trim(),
+    rating: parseInt(rating) || 5,
+    businessName: (BUSINESS_KNOWLEDGE[slug] || {}).name || '',
+    businessType: (BUSINESS_KNOWLEDGE[slug] || {}).categories ? BUSINESS_KNOWLEDGE[slug].categories.join(', ') : '',
+    tagLabels: (getTagsForRating(rating, 8) || []).map(t => (typeof t === 'string' ? t : t.label || t.l))
+  };
+
+  const base = suggestNextWords({ text, rating, slug });
+  const stillEnhancing = isEnhancing(input.text, input.rating, input.businessName, input.businessType, input.tagLabels);
+
+  // Fire the Gemini computation in the background (deduped/cached by key).
+  const geminiP = getSuggestedSuggestion(input).catch(() => null);
+
+  // If it resolves "fast" (cached), we can serve it synchronously here.
+  let gemini = await Promise.race([
+    geminiP,
+    new Promise(r => setTimeout(() => r(null), 60))
+  ]);
+
+  if (gemini) {
+    return {
+      source: 'gemini',
+      enhancing: false,
+      primary: gemini.primary,
+      alternatives: gemini.alternatives.length ? gemini.alternatives : base.alternatives
+    };
+  }
+
+  return {
+    source: 'static',
+    enhancing: stillEnhancing,
+    ...base
+  };
+}
