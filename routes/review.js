@@ -215,10 +215,14 @@ ${isCoolSpicy ? `
 .root.dark  .sb{background:rgba(14,165,233,0.06);border-color:rgba(56,189,248,0.16)}
 .root.light .sb.lit{background:rgba(255,255,255,0.7);border-color:rgba(186,230,253,0.95);transform:none;box-shadow:none}
 .root.dark  .sb.lit{background:rgba(14,165,233,0.08);border-color:rgba(56,189,248,0.25);transform:none;box-shadow:none}
-.sg{font-size:24px;line-height:1;color:rgba(148,163,184,0.35);transition:color .25s ease, transform .25s cubic-bezier(.34,1.5,.64,1), filter .25s ease;position:relative;z-index:1}
+.sg{font-size:24px;line-height:1;color:rgba(148,163,184,0.35);transition:color .25s ease, transform .25s cubic-bezier(.34,1.5,.64,1), filter .28s ease;position:relative;z-index:1}
 .root.dark .sg{color:rgba(100,116,139,0.35)}
-.sb.lit .sg{color:#f59e0b !important;transform:scale(1.2);filter:drop-shadow(0 2px 7px rgba(245,158,11,0.55))}
-.sb.lit.pop-wave .sg{animation:starPopWave .32s cubic-bezier(.34,1.56,.64,1) both}
+.sb.lit .sg{
+  color:#f59e0b !important;
+  transform:scale(1.2);
+  filter:drop-shadow(0 0 5px rgba(245,158,11,0.8)) drop-shadow(0 0 12px rgba(251,191,36,0.5)) drop-shadow(0 2px 4px rgba(217,119,6,0.4));
+}
+.sb.lit.pop-wave .sg{animation:starPopWave .34s cubic-bezier(.34,1.56,.64,1) both}
 @keyframes starPopWave{
   0%{transform:scale(0.8);opacity:0.7}
   55%{transform:scale(1.34)}
