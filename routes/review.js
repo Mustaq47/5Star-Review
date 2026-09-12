@@ -577,13 +577,13 @@ ${isKfc ? `
 </style>
 </head>
 <body>
-<div class="root light" id="root">
+<div class="root dark" id="root">
   <div class="orb o1"></div>
   <div class="orb o2"></div>
   <div class="orb o3"></div>
 
   <div class="shell">
-    <button class="mode-btn" id="modeBtn" onclick="toggleMode()" aria-label="Toggle dark mode">☀️</button>
+    <button class="mode-btn" id="modeBtn" onclick="toggleMode()" aria-label="Toggle light mode">🌙</button>
 
     <div class="glass">
 
@@ -693,7 +693,7 @@ let CURRENT_TAGS = ${tagsJson};
 const PLACE_ID = '${esc(client.place_id)}';
 const SLUG     = '${esc(client.slug)}';
 
-let dark=false, rating=5, sugg='', sgT=null, activeTags=new Set();
+let dark=true, rating=5, sugg='', sgT=null, activeTags=new Set();
 let sugGen = 0; // guard against stale async suggestions overwriting newer text
 
 function esc(s) {
