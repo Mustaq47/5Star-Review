@@ -13,10 +13,23 @@
 
 const db = require('../db/setup');
 const path = require('path');
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'gemini-embedding-001';
 const GEMINI_BASE = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
+
+function getGeminiApiKeys() {
+  const keys = [];
+  if (process.env.GEMINI_API_KEY) {
+    keys.push(...process.env.GEMINI_API_KEY.split(',').map(k => k.trim()).filter(Boolean));
+  }
+  if (process.env.GEMINI_API_KEY_2) {
+    keys.push(...process.env.GEMINI_API_KEY_2.split(',').map(k => k.trim()).filter(Boolean));
+  }
+  if (process.env.GEMINI_API_KEYS) {
+    keys.push(...process.env.GEMINI_API_KEYS.split(',').map(k => k.trim()).filter(Boolean));
+  }
+  return Array.from(new Set(keys));
+}
 
 // --- shared dedup / cache layer for suggestions ---
 const suggestionCache = new Map();
@@ -98,15 +111,16 @@ function buildSuggestionPrompt({ text, rating = 5, businessName = '', businessTy
   const tone = STAR_TONES[rating] || STAR_TONES[5];
   const biz = [businessName, businessType].filter(Boolean).join(' - ');
   const tags = (tagLabels && tagLabels.length) ? tagLabels.join(', ') : 'no specific tags';
+
   return [
-    'You are a smart autocomplete engine helping a customer finish their casual Google review.',
+    'You are a casual customer typing a real Google Review on a smartphone.',
+    `Business: ${biz || 'Local spot'}`,
+    `Customer Rating: ${rating}/5 (${tone})`,
+    `Selected Tags: ${tags}`,
+    `Text written so far: "${text || ''}"`,
     '',
-    `Rating: ${rating}/5 stars (${tone}).`,
-    biz ? `Business: ${biz}.` : '',
-    `Customer picked topics: ${tags}.`,
-    'Partial text typed so far: "' + (text || '(empty)') + '"',
-    '',
-    'Generate the most natural, casual continuation a real customer would type next on their phone:',
+    'Task: Suggest what natural words/phrases the customer would type NEXT to complete this thought.',
+    'Rules:',
     '- 1 short natural phrase/sentence, casual human phrasing (e.g. "and the food was super fresh", "staff were really sweet and quick").',
     '- No robotic corporate jargon, no emojis, no hashtags.',
     '- Provide only the CONTINUATION that attaches smoothly after the partial text.',
@@ -117,64 +131,73 @@ function buildSuggestionPrompt({ text, rating = 5, businessName = '', businessTy
 }
 
 async function suggestWithGemini({ text, rating = 5, businessName = '', businessType = '', tagLabels = [] }) {
-  if (!GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY not configured');
+  const geminiKeys = getGeminiApiKeys();
+  if (!geminiKeys.length) {
+    throw new Error('No GEMINI_API_KEY configured');
   }
 
   const prompt = buildSuggestionPrompt({ text, rating, businessName, businessType, tagLabels });
-  const url = `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
-  const res = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1024,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'object',
-          properties: {
-            primary: { type: 'string' },
-            alternatives: { type: 'array', items: { type: 'string' } }
-          },
-          required: ['primary', 'alternatives']
-        }
+  let lastErr = null;
+  for (const key of geminiKeys) {
+    try {
+      const url = `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+      const res = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1024,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'object',
+              properties: {
+                primary: { type: 'string' },
+                alternatives: { type: 'array', items: { type: 'string' } }
+              },
+              required: ['primary', 'alternatives']
+            }
+          }
+        })
+      }, 6000);
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`Gemini API error ${res.status}: ${errText.slice(0, 200)}`);
       }
-    })
-  });
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`Gemini API error ${res.status}: ${errText.slice(0, 200)}`);
+      const data = await res.json();
+      const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!content) throw new Error('Gemini API returned no content');
+
+      const cleaned = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
+      let parsed;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch (e) {
+        const start = cleaned.indexOf('{');
+        const end = cleaned.lastIndexOf('}');
+        if (start === -1 || end === -1) throw e;
+        parsed = JSON.parse(cleaned.slice(start, end + 1));
+      }
+
+      const primary = String(parsed.primary || '').trim();
+      const alternatives = Array.isArray(parsed.alternatives)
+        ? parsed.alternatives.map(a => String(a).trim()).filter(Boolean).slice(0, 4)
+        : [];
+
+      if (!primary) throw new Error('Gemini suggestion empty');
+
+      return { source: 'gemini', primary, alternatives };
+    } catch (err) {
+      lastErr = err;
+      console.warn('[suggestWithGemini] Key error, trying next key:', err.message);
+    }
   }
 
-  const data = await res.json();
-  const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!content) {
-    throw new Error('Gemini API returned no content');
-  }
-
-  const cleaned = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
-  let parsed;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch (e) {
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start === -1 || end === -1) throw e;
-    parsed = JSON.parse(cleaned.slice(start, end + 1));
-  }
-
-  const primary = String(parsed.primary || '').trim();
-  const alternatives = Array.isArray(parsed.alternatives)
-    ? parsed.alternatives.map(a => String(a).trim()).filter(Boolean).slice(0, 4)
-    : [];
-
-  if (!primary) throw new Error('Gemini suggestion empty');
-
-  return { source: 'gemini', primary, alternatives };
+  throw lastErr || new Error('All Gemini API keys exhausted');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -182,10 +205,11 @@ async function suggestWithGemini({ text, rating = 5, businessName = '', business
 // ═══════════════════════════════════════════════════════════════
 
 async function callGemini(prompt, { temperature = 0.95, maxTokens = 120, systemInstruction = '' } = {}) {
-  // 1. Try Gemini
-  if (GEMINI_API_KEY) {
+  // 1. Try Gemini keys pool
+  const geminiKeys = getGeminiApiKeys();
+  for (const key of geminiKeys) {
     try {
-      const url = `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+      const url = `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${key}`;
       const body = {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
@@ -203,10 +227,10 @@ async function callGemini(prompt, { temperature = 0.95, maxTokens = 120, systemI
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (text) return text;
       } else {
-        console.warn(`[callGemini] Gemini API ${resp.status}, trying NVIDIA NIM...`);
+        console.warn(`[callGemini] Gemini API ${resp.status}, trying next key/provider...`);
       }
     } catch (err) {
-      console.warn('[callGemini] Gemini failed, trying NVIDIA NIM:', err.message);
+      console.warn('[callGemini] Gemini key error, trying next key/provider:', err.message);
     }
   }
 
