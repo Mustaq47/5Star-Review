@@ -695,9 +695,9 @@ function updateButtonProgression() {
   const lightStart = 58 - Math.round(ratio * 2);
   const lightEnd = 46 - Math.round(ratio * 2);
 
-  const colStart = `hsl(${hue.toFixed(1)}, ${sat}%, ${lightStart}%)`;
-  const colEnd = `hsl(${((hue + 8) % 360).toFixed(1)}, ${sat}%, ${lightEnd}%)`;
-  const shadowCol = `hsla(${hue.toFixed(1)}, 90%, 50%, ${(0.32 + ratio * 0.12).toFixed(2)})`;
+  const colStart = 'hsl(' + hue.toFixed(1) + ', ' + sat + '%, ' + lightStart + '%)';
+  const colEnd = 'hsl(' + ((hue + 8) % 360).toFixed(1) + ', ' + sat + '%, ' + lightEnd + '%)';
+  const shadowCol = 'hsla(' + hue.toFixed(1) + ', 90%, 50%, ' + (0.32 + ratio * 0.12).toFixed(2) + ')';
 
   btn.style.setProperty('--c-start', colStart);
   btn.style.setProperty('--c-end', colEnd);
