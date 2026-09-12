@@ -287,7 +287,7 @@ ${isKfc ? `
 .root.light .biz-cat{color:#0284c7}
 .root.dark  .biz-cat{color:#38bdf8}
 
-.biz-desc{font-size:12.5px;line-height:1.58;margin-top:7px;transition:color .4s}
+.biz-desc{font-size:11px;line-height:1.45;margin-top:5px;transition:color .4s}
 .root.light .biz-desc{color:rgba(20,55,95,0.72)}
 .root.dark  .biz-desc{color:rgba(186,230,253,0.62)}
 
