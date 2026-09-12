@@ -15,17 +15,28 @@ if (process.env.RAILWAY_VOLUME_MOUNT_PATH) {
     console.warn('Volume directory create notice:', e.message);
   }
   dbPath = path.join(mountDir, 'reviewpro.db');
-} else if (process.env.VERCEL) {
+} else if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
   const tmpDb = '/tmp/reviewpro.db';
   try {
     if (!fs.existsSync(tmpDb)) {
-      if (fs.existsSync(dbPath)) {
-        fs.copyFileSync(dbPath, tmpDb);
+      const candidates = [
+        path.join(process.cwd(), 'reviewpro.db'),
+        path.join(__dirname, '..', 'reviewpro.db'),
+        path.join(__dirname, 'reviewpro.db')
+      ];
+      for (const src of candidates) {
+        if (fs.existsSync(src)) {
+          try {
+            fs.copyFileSync(src, tmpDb);
+            break;
+          } catch (copyErr) {}
+        }
       }
     }
     dbPath = tmpDb;
   } catch (err) {
-    console.error('Vercel tmp DB copy error:', err);
+    console.warn('Vercel tmp DB copy notice:', err.message);
+    dbPath = tmpDb;
   }
 }
 
