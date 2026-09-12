@@ -117,7 +117,7 @@ try {
     db.prepare('INSERT INTO clients (slug,business_name,category,description,emoji,place_id,primary_color,tags) VALUES (?,?,?,?,?,?,?,?)')
       .run('kfc', 'KFC', 'Fried Chicken · Burgers · Fast Food · Beverages',
         'World-famous crispy fried chicken, iconic zinger burgers, and flavorful sides.',
-        '🍗', 'ChIJX5u0_4uxSDsR83qK6Qy1k0s', '#e4002b', kfcTags);
+        '/images/kfc-logo.png', 'ChIJX5u0_4uxSDsR83qK6Qy1k0s', '#e4002b', kfcTags);
   }
 } catch (e) {
   console.error('Auto-seed error:', e);

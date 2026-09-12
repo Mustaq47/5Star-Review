@@ -281,7 +281,7 @@ code{background:var(--s3);padding:1px 7px;border-radius:5px;font-family:'DM Mono
   </div>
 </nav>
 <div class="page">${body}</div>
-<script src="/agentation.js"></script>
+${process.env.NODE_ENV !== 'production' ? '<script src="/agentation.js"></script>' : ''}
 </body></html>`;
 }
 
