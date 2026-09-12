@@ -221,7 +221,7 @@ async function callGemini(prompt, { temperature = 0.95, maxTokens = 120, systemI
       };
       if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
 
-      const resp = await fetchWithTimeout(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 8000);
+      const resp = await fetchWithTimeout(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 3500);
       if (resp.ok) {
         const data = await resp.json();
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -666,7 +666,7 @@ async function analyzeReviewStyle(clientId) {
 // ═══════════════════════════════════════════════════════════════
 
 function isGeminiAvailable() {
-  return !!GEMINI_API_KEY;
+  return getGeminiApiKeys().length > 0;
 }
 
 async function testGeminiConnection() {

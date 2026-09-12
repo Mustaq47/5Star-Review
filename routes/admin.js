@@ -4,6 +4,7 @@ const QRCode = require('qrcode');
 const db = require('../db/setup');
 const { requireAuth } = require('../middleware/auth');
 const { generateReviewWithAgent } = require('../services/reviewWriterAgent');
+const { loginLimiter } = require('../middleware/security');
 const router = express.Router();
 
 // ── AUTH ──────────────────────────────────────────────────────────
@@ -12,7 +13,7 @@ router.get('/login', (req, res) => {
   res.send(loginPage(req.query.error));
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', loginLimiter, (req, res) => {
   const { email, password } = req.body;
   const admin = db.prepare('SELECT * FROM admins WHERE email = ?').get(email);
   if (!admin || !bcrypt.compareSync(password, admin.password)) {

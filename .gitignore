@@ -2,5 +2,9 @@ node_modules/
 *.db
 *.db-journal
 .env
+.env.*
+!.env.example
 public/agentation.js
 scratch/
+zzzzzzzzzzz.txt
+

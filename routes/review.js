@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db/setup');
 const { getTagsForRating, generateReview, suggestNextWords, suggestNextWordsAsync } = require('../services/ragflowAgent');
 const { generateReviewWithAgent } = require('../services/reviewWriterAgent');
+const { aiLimiter } = require('../middleware/security');
 const router = express.Router();
 
 function isClientValid(client) {
@@ -22,7 +23,7 @@ router.get('/:slug', async (req, res) => {
 });
 
 // Dynamic Rating-based Tags API (now Gemini-powered)
-router.get('/:slug/tags', async (req, res) => {
+router.get('/:slug/tags', aiLimiter, async (req, res) => {
   const rating = parseInt(req.query.rating) || 5;
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
   if (!isClientValid(client)) {
@@ -37,7 +38,7 @@ router.get('/:slug/tags', async (req, res) => {
 });
 
 // Review Generator API (Hierarchy: AI [Gemini, OpenAI] → Review-Writer Agent → Local Synthesizer)
-router.post('/:slug/generate', async (req, res) => {
+router.post('/:slug/generate', aiLimiter, async (req, res) => {
   const { rating, tags, previousText } = req.body;
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
   if (!isClientValid(client)) {
@@ -59,7 +60,7 @@ router.post('/:slug/generate', async (req, res) => {
 });
 
 // RAGFlow Agent Next-Word Prediction API (Gemini + Local)
-router.post('/:slug/suggest', async (req, res) => {
+router.post('/:slug/suggest', aiLimiter, async (req, res) => {
   const { text, rating } = req.body;
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
   if (!isClientValid(client)) {
@@ -79,7 +80,7 @@ router.post('/:slug/suggest', async (req, res) => {
 });
 
 // Poll endpoint: returns the cached/best Gemini result once ready.
-router.post('/:slug/suggest/enhance', async (req, res) => {
+router.post('/:slug/suggest/enhance', aiLimiter, async (req, res) => {
   const { text, rating } = req.body;
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
   if (!isClientValid(client)) {

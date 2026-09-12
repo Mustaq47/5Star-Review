@@ -8,18 +8,31 @@ require('./db/setup');
 const adminRoutes = require('./routes/admin');
 const reviewRoutes = require('./routes/review');
 
+const { securityHeaders } = require('./middleware/security');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+if (isProd) {
+  app.set('trust proxy', 1);
+}
+
+app.use(securityHeaders);
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'reviewpro-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }
+  cookie: {
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isProd
+  }
 }));
 
 // Route root path: if logged-in admin, open dashboard; otherwise stay on review page
