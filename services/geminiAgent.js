@@ -99,21 +99,20 @@ function buildSuggestionPrompt({ text, rating = 5, businessName = '', businessTy
   const biz = [businessName, businessType].filter(Boolean).join(' - ');
   const tags = (tagLabels && tagLabels.length) ? tagLabels.join(', ') : 'no specific tags';
   return [
-    'You are an expert assistant that helps a customer finish writing a short Google review.',
+    'You are a smart autocomplete engine helping a customer finish their casual Google review.',
     '',
-    `Rating: ${rating} out of 5 stars (tone: ${tone}).`,
+    `Rating: ${rating}/5 stars (${tone}).`,
     biz ? `Business: ${biz}.` : '',
-    `Relevant experience tags the customer may mention: ${tags}.`,
-    'Partial review so far: "' + (text || '(empty)') + '"',
+    `Customer picked topics: ${tags}.`,
+    'Partial text typed so far: "' + (text || '(empty)') + '"',
     '',
-    'Write the MOST natural continuation the customer would type next:',
-    '- 1-2 short sentences, first person, human phrasing, no emojis, no clichés like "highly recommended".',
-    '- The continuation must be a real sentence fragment/phrase that extends the partial text.',
-    '- For low ratings (1-3), stay polite and constructive - never negative or ranting.',
-    '- Echo only NEW text that follows naturally after the partial review (do not repeat the partial text).',
+    'Generate the most natural, casual continuation a real customer would type next on their phone:',
+    '- 1 short natural phrase/sentence, casual human phrasing (e.g. "and the food was super fresh", "staff were really sweet and quick").',
+    '- No robotic corporate jargon, no emojis, no hashtags.',
+    '- Provide only the CONTINUATION that attaches smoothly after the partial text.',
     '',
-    'Respond ONLY with valid JSON in this exact shape (no markdown fences, no commentary):',
-    '{"primary": "<best single continuation>", "alternatives": ["<alt 1>", "<alt 2>", "<alt 3>"]}'
+    'Respond ONLY with valid JSON in this exact shape:',
+    '{"primary": "<best casual continuation>", "alternatives": ["<alt 1>", "<alt 2>", "<alt 3>"]}'
   ].filter(Boolean).join('\n');
 }
 
@@ -183,24 +182,70 @@ async function suggestWithGemini({ text, rating = 5, businessName = '', business
 // ═══════════════════════════════════════════════════════════════
 
 async function callGemini(prompt, { temperature = 0.95, maxTokens = 120, systemInstruction = '' } = {}) {
-  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set');
+  // 1. Try Gemini
+  if (GEMINI_API_KEY) {
+    try {
+      const url = `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+      const body = {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature,
+          maxOutputTokens: Math.max(16, Math.min(maxTokens, 1024)),
+          topP: 0.95,
+          thinkingConfig: { thinkingBudget: 0 }
+        },
+      };
+      if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
 
-  const url = `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-  const body = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature,
-      maxOutputTokens: Math.max(16, Math.min(maxTokens, 1024)),
-      topP: 0.95,
-      thinkingConfig: { thinkingBudget: 0 }
-    },
-  };
-  if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
+      const resp = await fetchWithTimeout(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 8000);
+      if (resp.ok) {
+        const data = await resp.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return text;
+      } else {
+        console.warn(`[callGemini] Gemini API ${resp.status}, trying NVIDIA NIM...`);
+      }
+    } catch (err) {
+      console.warn('[callGemini] Gemini failed, trying NVIDIA NIM:', err.message);
+    }
+  }
 
-  const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!resp.ok) throw new Error(`Gemini API ${resp.status}`);
-  const data = await resp.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  // 2. Fallback to NVIDIA NIM
+  const nvidiaKey = process.env.NVIDIA_API_KEY;
+  if (nvidiaKey) {
+    try {
+      const nvidiaBase = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
+      const nvidiaModel = process.env.NVIDIA_MODEL || 'deepseek-ai/deepseek-v4-flash-0731';
+      const messages = [];
+      if (systemInstruction) messages.push({ role: 'system', content: systemInstruction + ' Return ONLY the final casual review text.' });
+      messages.push({ role: 'user', content: prompt + ' Output ONLY the review text directly. No steps, no analysis.' });
+      const resp = await fetchWithTimeout(nvidiaBase.replace(/\/$/, '') + '/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + nvidiaKey
+        },
+        body: JSON.stringify({
+          model: nvidiaModel,
+          messages,
+          temperature,
+          max_tokens: maxTokens
+        })
+      }, 8000);
+      if (resp.ok) {
+        const data = await resp.json();
+        const choice = data.choices?.[0]?.message;
+        let content = choice?.content || '';
+        if (!content && choice?.reasoning_content) content = choice.reasoning_content;
+        content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        if (content) return content;
+      }
+    } catch (e) {
+      console.warn('[callGemini] NVIDIA fallback failed:', e.message);
+    }
+  }
+
+  throw new Error('AI providers unavailable');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -346,14 +391,18 @@ function learnFromCompletion(slug, partialText, chosenCompletion) {
 //  1. REVIEW GENERATION WITH MEMORY & UNIQUENESS
 // ═══════════════════════════════════════════════════════════════
 
-const REVIEW_SYSTEM_PROMPT = `You are an expert Google review writer. You write short, natural, human-sounding Google reviews (1-3 sentences) in English.
+const REVIEW_SYSTEM_PROMPT = `You write genuine, informal, 100% human Google reviews (1-2 casual sentences) as an everyday customer typing quickly on their phone.
 
-RULES:
-- Write in first-person ("I"/"we"), as a real customer.
-- When tags/aspects are selected, weave ALL of them smoothly and naturally into one cohesive review.
-- Never write harsh or negative reviews. For low ratings (1-2 stars), reframe constructively.
-- No emojis, no hashtags, no meta text or quotation marks.
-- Keep it concise (20-45 words).`;
+VOICE & TONE:
+- First-person ("I" or "we"), informal, casual, warm and friendly.
+- Sound like a real person talking to a friend (use words like: loved, honestly, super, totally, definitely, pretty good, really enjoyed, so tasty).
+- Strictly ban corporate/robotic words like "establishment", "exemplary", "delicacies", "culinary", "patron", "commendable", "in conclusion".
+- Weave the chosen topics/tags effortlessly into natural casual phrasing.
+- 5 Stars: enthusiastic, cheerful ("Honestly so good, crispy chicken was super crunchy and fries were fresh. Definitely coming back!").
+- 3-4 Stars: casual and positive ("Pretty good spot for a quick bite, food came out hot and staff were friendly.").
+- 1-2 Stars: polite and constructive ("Food was okay but had to wait a bit long for the order today, hope it improves next time.").
+- Output ONLY the review text. No emojis, no hashtags, no quotation marks.
+- Length: 15-35 words max.`;
 
 const reviewCache = new Map();
 const REVIEW_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
@@ -368,10 +417,10 @@ async function generateReviewWithGemini({ rating = 5, businessName, businessType
     return cached.review;
   }
 
-  const aspects = tagList.length > 0 ? `Selected aspects to mention together: ${tagList.join(', ')}.` : '';
+  const aspects = tagList.length > 0 ? `Selected topics: ${tagList.join(', ')}.` : '';
   const notes = userText ? `Customer notes: "${userText}".` : '';
 
-  const prompt = `Write a short 1-2 sentence Google review for ${businessName || 'this business'} (${businessType || 'business'}). Rating: ${r} stars. ${aspects} ${notes} Output review text only.`;
+  const prompt = `Write a quick informal 1-2 sentence Google review for ${businessName || 'this spot'} (${businessType || 'place'}). Rating: ${r} stars. ${aspects} ${notes} Keep it casual, human, and natural.`;
 
   let review = await callGemini(prompt, {
     temperature: 0.7,
@@ -401,6 +450,8 @@ const TAG_SYSTEM_PROMPT = `Generate ${8} short clickable review topic tags for a
 Output format: JSON array of objects with "l" (label with emoji, max 22 chars).
 Example: [{"l":"🍗 Crispy Chicken"},{"l":"🍟 Peri Peri Fries"},{"l":"⚡ Quick Service"}]
 Valid JSON only.`;
+
+const uniqueSeed = () => `[id:${Date.now().toString(36)}]`;
 
 async function generateTagsWithGemini({ rating = 5, businessName, businessType, category, limit = 8, clientId } = {}) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));

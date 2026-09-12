@@ -4,9 +4,18 @@ const { getTagsForRating, generateReview, suggestNextWords, suggestNextWordsAsyn
 const { generateReviewWithAgent } = require('../services/reviewWriterAgent');
 const router = express.Router();
 
+function isClientValid(client) {
+  if (!client || !client.active) return false;
+  if (client.expires_at && new Date(client.expires_at).getTime() < Date.now()) return false;
+  return true;
+}
+
 router.get('/:slug', async (req, res) => {
-  const client = db.prepare('SELECT * FROM clients WHERE slug=? AND active=1').get(req.params.slug);
-  if (!client) return res.status(404).send(notFound());
+  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  if (!client || !client.active) return res.status(404).send(notFound());
+  if (client.expires_at && new Date(client.expires_at).getTime() < Date.now()) {
+    return res.status(410).send(expiredPage(client));
+  }
   db.prepare('INSERT INTO pageviews (client_id) VALUES (?)').run(client.id);
   const initialTags = await getTagsForRating(5, 8, client);
   res.send(reviewPage(client, initialTags));
@@ -16,6 +25,9 @@ router.get('/:slug', async (req, res) => {
 router.get('/:slug/tags', async (req, res) => {
   const rating = parseInt(req.query.rating) || 5;
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  if (!isClientValid(client)) {
+    return res.status(403).json({ ok: false, error: 'Review link expired or inactive' });
+  }
   try {
     const tags = await getTagsForRating(rating, 8, client);
     res.json({ ok: true, tags });
@@ -28,6 +40,9 @@ router.get('/:slug/tags', async (req, res) => {
 router.post('/:slug/generate', async (req, res) => {
   const { rating, tags, previousText } = req.body;
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  if (!isClientValid(client)) {
+    return res.status(403).json({ ok: false, error: 'Review link expired or inactive' });
+  }
   const ratingNum = parseInt(rating) || 5;
   try {
     const review = await generateReview({
@@ -47,6 +62,9 @@ router.post('/:slug/generate', async (req, res) => {
 router.post('/:slug/suggest', async (req, res) => {
   const { text, rating } = req.body;
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  if (!isClientValid(client)) {
+    return res.status(403).json({ ok: false, error: 'Review link expired or inactive' });
+  }
   try {
     const suggestion = await suggestNextWords({
       text: text || '',
@@ -63,6 +81,10 @@ router.post('/:slug/suggest', async (req, res) => {
 // Poll endpoint: returns the cached/best Gemini result once ready.
 router.post('/:slug/suggest/enhance', async (req, res) => {
   const { text, rating } = req.body;
+  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  if (!isClientValid(client)) {
+    return res.json({ ok: true, ready: false });
+  }
   const input = {
     text: (text || '').trim(),
     rating: parseInt(rating) || 5,
@@ -80,7 +102,7 @@ router.post('/:slug/suggest/enhance', async (req, res) => {
 
 router.post('/:slug/click', (req, res) => {
   const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
-  if (client) db.prepare('INSERT INTO review_clicks (client_id) VALUES (?)').run(client.id);
+  if (client && isClientValid(client)) db.prepare('INSERT INTO review_clicks (client_id) VALUES (?)').run(client.id);
   res.json({ ok: true });
 });
 
@@ -93,6 +115,44 @@ function notFound() {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Not Found</title>
   <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:sans-serif;background:#050d1a;color:#e8e0f8;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px}</style>
   </head><body><div><div style="font-size:44px;margin-bottom:14px">🔍</div><h2 style="font-size:18px;margin-bottom:8px">Page not found</h2><p style="color:#50507a;font-size:14px">This review link is inactive or doesn't exist.</p></div></body></html>`;
+}
+
+function expiredPage(client) {
+  const hasLogo = Boolean(client.emoji && client.emoji.trim() !== '' && client.emoji !== 'none' && client.emoji !== 'null');
+  const isImageLogo = hasLogo && (client.emoji.startsWith('/') || client.emoji.startsWith('http') || client.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i));
+  const logoHtml = isImageLogo
+    ? `<img src="${esc(client.emoji)}" alt="${esc(client.business_name)}" style="width:72px;height:72px;object-fit:contain;border-radius:18px;margin-bottom:18px">`
+    : `<div style="font-size:48px;margin-bottom:16px">${esc(client.emoji || '🏪')}</div>`;
+  const expDate = client.expires_at ? new Date(client.expires_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'recently';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Link Expired — ${esc(client.business_name)}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#060813;color:#e8e0f8;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center}
+.card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);backdrop-filter:blur(20px);border-radius:24px;padding:40px 28px;max-width:420px;width:100%;box-shadow:0 24px 48px rgba(0,0,0,0.4)}
+.badge-exp{display:inline-flex;align-items:center;gap:6px;background:rgba(248,113,113,0.12);color:#f87171;border:1px solid rgba(248,113,113,0.25);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:18px}
+h1{font-size:22px;font-weight:700;color:#fff;margin-bottom:8px}
+p{font-size:14px;color:#94a3b8;line-height:1.6;margin-bottom:24px}
+.biz-pill{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);padding:10px 16px;border-radius:12px;font-size:13px;color:#e2e8f0;display:inline-block;margin-bottom:20px}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge-exp"><i class="ti ti-clock-off"></i> Validity Period Ended</div>
+    ${logoHtml}
+    <div class="biz-pill">${esc(client.business_name)}</div>
+    <h1>QR Code / Review Link Expired</h1>
+    <p>The active timer for this review link expired on <strong>${expDate}</strong>. If you would still like to leave a review, please ask the business staff for the latest QR code.</p>
+  </div>
+</body>
+</html>`;
 }
 
 function reviewPage(client, tags) {

@@ -40,6 +40,7 @@ db.exec(`
     primary_color TEXT DEFAULT '#7c4dff',
     tags TEXT DEFAULT '[]',
     active INTEGER DEFAULT 1,
+    expires_at DATETIME DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -75,6 +76,13 @@ db.exec(`
   -- Index for fast similarity searches
   CREATE INDEX IF NOT EXISTS idx_review_memory_client ON review_memory(client_id);
 `);
+
+// Migration: add expires_at if missing
+try {
+  db.exec("ALTER TABLE clients ADD COLUMN expires_at DATETIME DEFAULT NULL;");
+} catch (e) {
+  // column already exists
+}
 
 // Auto-seed default admin if database is new
 try {

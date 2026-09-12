@@ -44,13 +44,56 @@ router.get('/clients/new', requireAuth, (req, res) => {
   res.send(clientFormPage(null, req.query.error));
 });
 
+function calculateExpiry(expiryType, customDate) {
+  if (!expiryType || expiryType === 'unlimited') return null;
+  if (expiryType === 'custom') {
+    if (!customDate) return null;
+    const d = new Date(customDate);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  const now = new Date();
+  if (expiryType === '7d') now.setDate(now.getDate() + 7);
+  else if (expiryType === '14d') now.setDate(now.getDate() + 14);
+  else if (expiryType === '30d' || expiryType === '1m') now.setMonth(now.getMonth() + 1);
+  else if (expiryType === '90d' || expiryType === '3m') now.setMonth(now.getMonth() + 3);
+  else if (expiryType === '180d' || expiryType === '6m') now.setMonth(now.getMonth() + 6);
+  else if (expiryType === '365d' || expiryType === '1y') now.setFullYear(now.getFullYear() + 1);
+  else return null;
+  return now.toISOString();
+}
+
+function getExpiryInfo(client) {
+  if (!client.active) {
+    return { status: 'paused', label: 'Paused', badgeClass: 'badge-red', dot: true };
+  }
+  if (!client.expires_at) {
+    return { status: 'unlimited', label: 'Unlimited', badgeClass: 'badge-purple', dot: true };
+  }
+  const exp = new Date(client.expires_at);
+  const now = new Date();
+  const diffMs = exp.getTime() - now.getTime();
+  if (diffMs <= 0) {
+    return { status: 'expired', label: 'Expired', badgeClass: 'badge-red', dot: false };
+  }
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays <= 3) {
+    return { status: 'expiring', label: diffDays === 1 ? '1 day left' : `${diffDays} days left`, badgeClass: 'badge-yellow', dot: true };
+  }
+  if (diffDays <= 30) {
+    return { status: 'active', label: `${diffDays} days left`, badgeClass: 'badge-green', dot: true };
+  }
+  const diffMonths = Math.round(diffDays / 30);
+  return { status: 'active', label: `${diffMonths} mo left`, badgeClass: 'badge-green', dot: true };
+}
+
 router.post('/clients/new', requireAuth, (req, res) => {
-  const { business_name, category, description, emoji, place_id, primary_color, tags_input } = req.body;
+  const { business_name, category, description, emoji, place_id, primary_color, tags_input, expiry_type, custom_expires_at } = req.body;
   const slug = business_name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + Date.now().toString(36);
   const tags = parseTags(tags_input);
+  const expires_at = calculateExpiry(expiry_type, custom_expires_at);
   try {
-    db.prepare('INSERT INTO clients (slug,business_name,category,description,emoji,place_id,primary_color,tags) VALUES (?,?,?,?,?,?,?,?)')
-      .run(slug, business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', JSON.stringify(tags));
+    db.prepare('INSERT INTO clients (slug,business_name,category,description,emoji,place_id,primary_color,tags,expires_at) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run(slug, business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', JSON.stringify(tags), expires_at);
     res.redirect('/admin');
   } catch(e) {
     res.redirect('/admin/clients/new?error=' + encodeURIComponent(e.message));
@@ -64,10 +107,11 @@ router.get('/clients/:id/edit', requireAuth, (req, res) => {
 });
 
 router.post('/clients/:id/edit', requireAuth, (req, res) => {
-  const { business_name, category, description, emoji, place_id, primary_color, tags_input, active } = req.body;
+  const { business_name, category, description, emoji, place_id, primary_color, tags_input, active, expiry_type, custom_expires_at } = req.body;
   const tags = parseTags(tags_input);
-  db.prepare('UPDATE clients SET business_name=?,category=?,description=?,emoji=?,place_id=?,primary_color=?,tags=?,active=? WHERE id=?')
-    .run(business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', JSON.stringify(tags), active==='on'?1:0, req.params.id);
+  const expires_at = calculateExpiry(expiry_type, custom_expires_at);
+  db.prepare('UPDATE clients SET business_name=?,category=?,description=?,emoji=?,place_id=?,primary_color=?,tags=?,active=?,expires_at=? WHERE id=?')
+    .run(business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', JSON.stringify(tags), active==='on'?1:0, expires_at, req.params.id);
   res.redirect('/admin');
 });
 
@@ -212,6 +256,7 @@ button{font-family:'DM Sans',sans-serif}
 .badge-green{background:rgba(52,211,153,0.1);color:var(--green);border:1px solid rgba(52,211,153,0.2)}
 .badge-red{background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.2)}
 .badge-purple{background:rgba(167,139,250,0.1);color:var(--accent);border:1px solid rgba(167,139,250,0.2)}
+.badge-yellow{background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.25)}
 .badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
 
 /* ── BUTTONS ── */
@@ -347,6 +392,7 @@ function dashboardPage(clients) {
     ? `<tr><td colspan="7"><div class="empty"><div class="empty-ico">🏪</div><div class="empty-title">No clients yet</div><div class="text-sm">Add your first client to get started</div></div></td></tr>`
     : clients.map(c => {
         const cr = c.views > 0 ? ((c.clicks/c.views)*100).toFixed(0) : 0;
+        const expInfo = getExpiryInfo(c);
         return `<tr>
           <td>
             <div class="biz-cell">
@@ -366,7 +412,12 @@ function dashboardPage(clients) {
             <div class="mono" style="font-size:15px;color:#f0e8ff">${c.clicks}</div>
             <div class="text-xs mt4" style="color:var(--t3)">${cr}% conv.</div>
           </td>
-          <td><span class="badge ${c.active ? 'badge-green':'badge-red'}"><span class="badge-dot"></span>${c.active?'Active':'Paused'}</span></td>
+          <td>
+            <span class="badge ${expInfo.badgeClass}">
+              ${expInfo.dot ? '<span class="badge-dot"></span>' : ''}${esc(expInfo.label)}
+            </span>
+            ${c.expires_at ? `<div class="text-xs mt4 mono" style="color:var(--t3);font-size:10px">${new Date(c.expires_at).toLocaleDateString()}</div>` : ''}
+          </td>
           <td style="white-space:nowrap"><span class="text-xs mono" style="color:var(--t3)">${c.created_at ? c.created_at.split(' ')[0] : '—'}</span></td>
           <td>
             <div class="action-row">
@@ -421,7 +472,7 @@ function dashboardPage(clients) {
           <th>Category</th>
           <th>Views</th>
           <th>Clicks</th>
-          <th>Status</th>
+          <th>QR Status &amp; Timer</th>
           <th>Added</th>
           <th>Actions</th>
         </tr></thead>
@@ -436,6 +487,7 @@ function clientFormPage(client, error) {
   const isEdit = !!client;
   const defaultTags = 'Great food|The food here is absolutely delicious — highly recommend!\nFriendly staff|Staff are warm, welcoming and very attentive.\nFast service|Service was quick and efficient without any wait.\nGreat value|Excellent value for money — generous portions at fair prices.\nClean space|The place is spotless and well maintained.\nWill visit again|Loved the overall experience — will definitely be back!';
   const tagsStr = client ? JSON.parse(client.tags||'[]').map(t=>`${t.l}|${t.t}`).join('\n') : defaultTags;
+  const expInfo = client ? getExpiryInfo(client) : null;
 
   return shell(isEdit ? 'Edit — '+client.business_name : 'New Client', `
     <div class="page-hdr">
@@ -490,9 +542,42 @@ function clientFormPage(client, error) {
             <span class="form-hint">Find at: <code>developers.google.com/maps/documentation/javascript/examples/places-placeid-finder</code></span>
           </div>
 
+          <!-- ── QR CODE & LINK USAGE RESTRICTION / TIMER ── -->
+          <div class="form-group" style="background:var(--s2);border:1px solid var(--b1);border-radius:14px;padding:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <label class="form-label" style="margin:0;display:flex;align-items:center;gap:6px;color:var(--t1)">
+                <i class="ti ti-hourglass-empty" style="color:var(--accent);font-size:16px"></i> QR Code &amp; Link Expiry Timer
+              </label>
+              ${expInfo ? `<span class="badge ${expInfo.badgeClass}" style="font-size:11px">${expInfo.dot?'<span class="badge-dot"></span>':''}${expInfo.label}</span>` : '<span class="badge badge-purple" style="font-size:11px">Default: Unlimited</span>'}
+            </div>
+            
+            <div class="form-2col">
+              <div class="form-group">
+                <label class="form-label" style="font-size:10.5px">Validity Duration / Preset</label>
+                <select class="form-select" name="expiry_type" id="expiryType" onchange="onExpiryChange()">
+                  <option value="unlimited" ${!client?.expires_at ? 'selected' : ''}>♾️ Unlimited (No expiration)</option>
+                  <option value="7d">⏱️ 7 Days</option>
+                  <option value="14d">⏱️ 14 Days</option>
+                  <option value="30d">⏱️ 30 Days (1 Month)</option>
+                  <option value="90d">⏱️ 90 Days (3 Months)</option>
+                  <option value="180d">⏱️ 180 Days (6 Months)</option>
+                  <option value="365d">⏱️ 1 Year</option>
+                  <option value="custom" ${client?.expires_at ? 'selected' : ''}>📅 Specific Date &amp; Time...</option>
+                </select>
+              </div>
+              <div class="form-group" id="customDateWrap" style="${client?.expires_at ? '' : 'display:none'}">
+                <label class="form-label" style="font-size:10.5px">Exact Expiry Date</label>
+                <input class="form-input" type="datetime-local" name="custom_expires_at" id="customExpiresAt" value="${client?.expires_at ? new Date(client.expires_at).toISOString().slice(0,16) : ''}">
+              </div>
+            </div>
+            <span class="form-hint" style="margin-top:6px;display:block">
+              Set how long customers can scan this QR code or open the review link. When the timer finishes, the page automatically switches to a friendly expired notice.
+            </span>
+          </div>
+
           <div class="form-group">
             <label class="form-label">Quick tags <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--t3)">(one per line — Label | Review text)</span></label>
-            <textarea class="form-textarea" name="tags_input" style="min-height:160px;font-family:'DM Mono',monospace;font-size:12px;line-height:1.7" placeholder="Biryani must-try|The biryani here is exceptional — perfectly spiced.">${tagsStr}</textarea>
+            <textarea class="form-textarea" name="tags_input" style="min-height:140px;font-family:'DM Mono',monospace;font-size:12px;line-height:1.7" placeholder="Biryani must-try|The biryani here is exceptional — perfectly spiced.">${tagsStr}</textarea>
             <span class="form-hint">Format: <code>Button label | Full review text inserted when tapped</code></span>
           </div>
 
@@ -523,6 +608,21 @@ function clientFormPage(client, error) {
       const on = tog.classList.toggle('on');
       document.getElementById('activeInp').value = on ? 'on' : 'off';
       document.getElementById('togLbl').textContent = on ? 'Active — page is live and accessible' : 'Paused — page is hidden from visitors';
+    }
+
+    function onExpiryChange() {
+      const val = document.getElementById('expiryType').value;
+      const wrap = document.getElementById('customDateWrap');
+      if (val === 'custom') {
+        wrap.style.display = 'block';
+        if (!document.getElementById('customExpiresAt').value) {
+          const d = new Date();
+          d.setMonth(d.getMonth() + 1);
+          document.getElementById('customExpiresAt').value = d.toISOString().slice(0,16);
+        }
+      } else {
+        wrap.style.display = 'none';
+      }
     }
     </script>
   `);

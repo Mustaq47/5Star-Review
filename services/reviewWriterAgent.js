@@ -17,24 +17,14 @@ const NVIDIA_MODEL = process.env.NVIDIA_MODEL || 'deepseek-ai/deepseek-v4-flash-
 const { generateReviewWithGemini, isGeminiAvailable } = require('./geminiAgent');
 
 function loadAgentPrompt() {
-  try {
-    const raw = fs.readFileSync(AGENT_FILE, 'utf8');
-    const body = raw.split('---').slice(2).join('---').trim();
-    return body || defaultPrompt();
-  } catch (e) {
-    return defaultPrompt();
-  }
+  return defaultPrompt();
 }
 
 function defaultPrompt() {
-  return 'You are an expert Google review writer. Write short natural positive'
-    + ' human-sounding 2-4 sentence reviews in English. Use only details'
-    + ' from the user text. Never invent specifics. Never write negative reviews;'
-    + ' low ratings are reframed as constructive feedback. Tone matches the rating,'
-    + ' from enthusiastic (5) to constructive (1-2).';
+  return 'You write genuine, informal, 100% human Google reviews (1-2 casual sentences) as an everyday customer typing on their phone. First person ("I"/"we"), casual, warm and conversational. No robotic corporate jargon, no emojis, no hashtags. Reframe low ratings constructively.';
 }
 
-const SYSTEM_PROMPT = loadAgentPrompt();
+const SYSTEM_PROMPT = defaultPrompt();
 
 
 // Local positive-only fallback generator.
@@ -105,7 +95,9 @@ async function callChat(apiBase, apiKey, model, messages) {
   }
   const data = await resp.json();
   const choice = data.choices?.[0]?.message;
-  const content = choice?.content || choice?.reasoning_content || '';
+  let content = choice?.content || '';
+  if (!content && choice?.reasoning_content) content = choice.reasoning_content;
+  content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   return String(content).trim();
 }
 
