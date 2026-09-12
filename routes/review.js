@@ -18,15 +18,17 @@ router.get('/:slug/tags', (req, res) => {
   res.json({ ok: true, tags });
 });
 
-// RAGFlow Agent Review Generator API (Zero repetition)
+// RAGFlow Agent Review Generator API (Zero repetition with huge context)
 router.post('/:slug/generate', async (req, res) => {
   const { rating, tags, previousText } = req.body;
+  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
   try {
     const review = await generateReview({
       slug: req.params.slug,
       rating: parseInt(rating) || 5,
       tags: Array.isArray(tags) ? tags : [],
-      previousText: previousText || ''
+      previousText: previousText || '',
+      client
     });
     res.json({ ok: true, review });
   } catch (err) {
@@ -37,10 +39,12 @@ router.post('/:slug/generate', async (req, res) => {
 // RAGFlow Agent Next-Word Prediction API
 router.post('/:slug/suggest', (req, res) => {
   const { text, rating } = req.body;
+  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
   const suggestion = suggestNextWords({
     text: text || '',
     rating: parseInt(rating) || 5,
-    slug: req.params.slug
+    slug: req.params.slug,
+    client
   });
   res.json({ ok: true, suggestion });
 });

@@ -1,350 +1,459 @@
 // services/ragflowAgent.js
-// Advanced AI Review Synthesis & Contextual Multi-Word Next-Phrase Prediction Engine
+// Next-Gen Context-Aware AI Review & Autocomplete Intelligence Engine
 
 const RAGFLOW_API_URL = process.env.RAGFLOW_API_URL || 'http://localhost:9380/api/v1';
 const RAGFLOW_API_KEY = process.env.RAGFLOW_API_KEY || '';
 const RAGFLOW_AGENT_ID = process.env.RAGFLOW_AGENT_ID || '';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 
 /**
- * Enriched Business Knowledge Graph
+ * Multi-Domain Semantic Knowledge Base
+ * Automatically blends business database metadata with rich contextual lexicons.
  */
-const BUSINESS_KNOWLEDGE = {
-  'cool-and-spicy': {
-    name: 'Cool & Spicy',
-    location: 'Bombay Road, Buchireddypalem, Nellore',
-    categories: ['Ice Creams', 'Thick Milkshakes', 'Pizzas', 'Crispy Fried Chicken', 'Desserts', 'Snacks'],
+const DOMAIN_LEXICONS = {
+  food_dessert: {
     dishes: [
-      'Belgian Chocolate Ice Cream',
-      'Butterscotch Sundae',
-      'Cream More Delight',
-      'KitKat Thick Shake',
-      'Oreo Blast Shake',
-      'Crispy Fried Chicken Bucket',
-      'Farmhouse Cheese Pizza',
-      'Peri Peri Paneer Pizza',
-      'Spicy Chicken Wings'
+      'Belgian Chocolate Ice Cream', 'KitKat Thick Shake', 'Oreo Blast Shake',
+      'Crispy Fried Chicken Bucket', 'Farmhouse Cheese Pizza', 'Peri Peri Paneer Pizza',
+      'Spicy Chicken Wings', 'Butterscotch Sundae', 'Cream More Delight',
+      'Brownie with Ice Cream', 'Loaded Cheese Garlic Bread', 'Tender Chicken Strips'
     ],
-    ambience: 'vibrant fairy lights, cozy family atmosphere, spacious outdoor seating',
-    vibes: ['family dinner', 'friends hangout', 'evening dessert date', 'weekend food trip'],
-    strengths: ['rich authentic taste', 'clean and hygienic kitchen', 'generous portion size', 'quick courteous service', 'unbeatable value for money']
+    qualities: ['rich and creamy', 'thick and velvety', 'crispy and succulent', 'freshly baked and piping hot', 'perfectly spiced', 'melt-in-the-mouth', 'flavorful in every bite'],
+    ambience: ['fairy lights and cozy seating', 'vibrant evening mood', 'clean and welcoming environment', 'perfect lighting for pictures', 'warm family atmosphere'],
+    service: ['lightning fast service', 'extremely polite staff', 'hygienic preparation', 'attentive hospitality', 'spotless clean tables']
+  },
+  south_indian: {
+    dishes: [
+      'Crispy Ghee Roast Dosa', 'Podi Idli', 'Nellore Chepala Pulusu',
+      'Special Dum Biryani', 'Mutton Fry Biryani', 'Filter Coffee',
+      'Curd Rice with Pomegranate', 'Paneer Butter Masala', 'Natukodi Pulusu'
+    ],
+    qualities: ['authentic regional flavors', 'aromatic spices', 'fresh homemade chutneys', 'steaming hot and fresh', 'generous portion size'],
+    ambience: ['traditional warm ambiance', 'comfortable family dining', 'clean and spacious seating'],
+    service: ['quick service', 'warm courteous staff', 'authentic hospitality']
+  },
+  general: {
+    dishes: ['Signature Specials', 'Chef Specials', 'Fresh Delicacies', 'Beverages', 'Combo Meals'],
+    qualities: ['top-notch quality', 'consistently delicious', 'great portion sizes', 'fresh ingredients', 'unbeatable value'],
+    ambience: ['modern cozy vibes', 'relaxing environment', 'great ambience with music', 'clean and well-maintained'],
+    service: ['prompt service', 'friendly and helpful staff', 'warm welcome', 'seamless experience']
   }
 };
 
 /**
- * Dynamic Rating Tag Pools by Category Facet
+ * Universal Grammatical & Semantic Transition Graph
+ * Enables multi-word, fluid continuous next-phrase autocomplete for any input.
  */
-const TAG_POOLS = {
-  5: [
-    { l: '🍦 Best ice creams', topic: 'ice_cream', phrase: 'The ice creams are exquisitely creamy, rich, and full of delightful flavours.' },
-    { l: '🥤 Amazing milkshakes', topic: 'milkshake', phrase: 'The thick milkshakes are perfectly blended and an absolute treat.' },
-    { l: '🍕 Delicious pizza', topic: 'pizza', phrase: 'The pizzas are freshly baked with a golden crispy crust and plenty of cheese.' },
-    { l: '🍗 Crispy fried chicken', topic: 'chicken', phrase: 'The fried chicken is crispy on the outside, tender and juicy inside.' },
-    { l: '⚡ Lightning fast service', topic: 'service', phrase: 'The service is exceptionally prompt, and the staff are warmly welcoming.' },
-    { l: '💰 Pocket-friendly', topic: 'value', phrase: 'Generous portions at very reasonable prices — outstanding value.' },
-    { l: '🌟 Fairy light ambience', topic: 'ambience', phrase: 'The night fairy lights and vibrant ambience create a wonderful cozy vibe.' },
-    { l: '🍨 Cream More Delight', topic: 'signature', phrase: 'The Cream More special desserts and sundaes are top-notch and a must-try.' },
-    { l: '💖 Highly recommend', topic: 'recommend', phrase: 'Hands down one of the finest food and dessert spots in town — 10/10 experience!' },
-    { l: '👨‍👩‍👧 Perfect for family', topic: 'crowd', phrase: 'A wonderful, clean environment for family gatherings and evening hangouts.' }
+const CONTEXT_TRANSITIONS = {
+  // Starters
+  'i': [
+    ' really loved the food and the wonderful fairy light atmosphere here',
+    ' had an extraordinary experience and thoroughly enjoyed everything we ordered',
+    ' tried their signature ice creams and crispy chicken — both were incredible',
+    ' visited with my family and was genuinely blown away by the taste and hospitality',
+    ' ordered the thick shakes and pizzas, and the taste was pure perfection',
+    ' would highly recommend this place to anyone looking for great taste and good vibes',
+    ' loved the quick service, great music, and friendly staff'
   ],
-  4: [
-    { l: '🍦 Tasty ice creams', topic: 'ice_cream', phrase: 'Good variety of ice cream options and delicious taste.' },
-    { l: '🥤 Delicious shakes', topic: 'milkshake', phrase: 'Milkshakes had great consistency and rich flavour.' },
-    { l: '🍕 Fresh hot pizza', topic: 'pizza', phrase: 'Pizza was tasty and served fresh out of the oven.' },
-    { l: '🍗 Good fried chicken', topic: 'chicken', phrase: 'Crispy fried chicken seasoned nicely.' },
-    { l: '⚡ Friendly staff', topic: 'service', phrase: 'Friendly staff and prompt response throughout our visit.' },
-    { l: '💰 Great value', topic: 'value', phrase: 'Good food quality for the price paid.' },
-    { l: '🌟 Cozy atmosphere', topic: 'ambience', phrase: 'Pleasant lighting and comfortable seating.' }
+  'we': [
+    ' had a fantastic time enjoying the delicious food and cozy ambience',
+    ' tried multiple items from the menu and each one was prepared to perfection',
+    ' loved the crispy fried chicken, loaded pizzas, and creamy thick shakes',
+    ' came here for an evening hangout with friends and had a wonderful time',
+    ' were very impressed with the cleanliness, prompt service, and portion sizes',
+    ' ordered a variety of desserts and they were rich, creamy, and delightful'
   ],
-  3: [
-    { l: '🍦 Decent ice cream', topic: 'ice_cream', phrase: 'Average ice cream options with standard quality.' },
-    { l: '🥤 Standard shakes', topic: 'milkshake', phrase: 'Milkshakes were okay and reasonably chilled.' },
-    { l: '🍕 Average pizza', topic: 'pizza', phrase: 'Decent pizza crust and toppings.' },
-    { l: '⚡ Normal service', topic: 'service', phrase: 'Service was standard and food was served on time.' },
-    { l: '💰 Fair pricing', topic: 'value', phrase: 'Prices are reasonable for the portions.' }
+  'the': [
+    ' food quality, taste, and hospitality here are absolutely outstanding',
+    ' ice creams and thick shakes are rich, creamy, and an absolute treat',
+    ' crispy fried chicken is super crunchy on the outside and juicy inside',
+    ' pizzas have a wonderful golden crust with plenty of delicious toppings',
+    ' ambience with fairy lights creates a cozy and magical evening vibe',
+    ' staff members are polite, attentive, and provide lightning fast service',
+    ' prices are very pocket-friendly and offer incredible value for money'
   ],
-  2: [
-    { l: '⏳ Long wait time', topic: 'service', phrase: 'Had to wait longer than expected for our order to arrive.' },
-    { l: '🍗 Chicken can be better', topic: 'chicken', phrase: 'Fried chicken was a bit oily and could be crispier.' },
-    { l: '⚡ Service needs speed', topic: 'service', phrase: 'Staff could be more proactive during rush hours.' }
+
+  // Specific Entities
+  'food': [
+    ' is fresh, flavorful, and served piping hot with great presentation',
+    ' quality exceeded all our expectations — absolutely delicious',
+    ' here is authentic, hygienic, and prepared with high quality ingredients',
+    ' was served surprisingly fast and tasted super fresh'
   ],
-  1: [
-    { l: '⏳ Poor service speed', topic: 'service', phrase: 'Service was quite slow and needed follow ups.' },
-    { l: '❄️ Food not hot', topic: 'quality', phrase: 'Food was not hot when served.' }
+  'taste': [
+    ' is genuinely authentic, mouth-watering, and memorable in every bite',
+    ' was completely on point with rich flavors and perfect seasoning',
+    ' and presentation are top-tier — by far the best in the area'
+  ],
+  'ice cream': [
+    ' flavours are rich, smooth, and delightfully creamy with plenty of varieties',
+    ' specials like Cream More and Belgian Chocolate are must-tries',
+    ' was thick, creamy, and made with genuine premium ingredients'
+  ],
+  'milkshake': [
+    ' had the perfect thick consistency and rich indulgence in every sip',
+    ' varieties like KitKat and Oreo blast are thick, creamy, and delicious'
+  ],
+  'chicken': [
+    ' is seasoned to perfection, crispy on the outside and wonderfully juicy inside',
+    ' bucket and wings are crispy, flavorful, and seasoned with delicious herbs'
+  ],
+  'pizza': [
+    ' was freshly baked with a golden crispy crust and generous melted cheese',
+    ' toppings were fresh and flavorful with a mouth-watering crust'
+  ],
+  'service': [
+    ' was lightning fast, warm, and attentive throughout our visit',
+    ' is quick, courteous, and handled with a welcoming smile',
+    ' speed was impressive even during peak rush hours'
+  ],
+  'staff': [
+    ' were extremely welcoming, helpful with recommendations, and very polite',
+    ' are courteous, attentive, and maintain great hygiene standards'
+  ],
+  'ambience': [
+    ' with fairy lights looks stunning at night and creates a relaxing vibe',
+    ' is modern, lively, and great for family dinners as well as friends hangouts'
+  ],
+  'price': [
+    ' is very reasonable considering the generous portions and high food quality',
+    ' points are pocket-friendly and give great value for every rupee spent'
+  ],
+  'recommend': [
+    ' this spot to all foodies, families, and dessert lovers without hesitation',
+    ' visiting in the evening to enjoy the fairy lights and great atmosphere'
   ]
 };
 
 /**
- * Multi-Tone Stochastic Templates (Casual, Foodie, Family, Enthusiast)
+ * Intelligent Partial Prefix & Word Completion Matcher
  */
-const INTRO_TEMPLATES = [
-  "Visited this place recently and had a truly fantastic experience!",
-  "Had an amazing evening hangout here and loved every single bit of it.",
-  "Without a doubt, one of our absolute favourite food spots in the area!",
-  "Stopped by for dessert and snacks, and was genuinely blown away by the quality.",
-  "Everything about this spot is on point — from fresh taste to great hospitality.",
-  "Such a delightful experience! The food, drinks, and atmosphere all hit the spot.",
-  "Came here on a friend's recommendation and it completely lived up to the hype!",
-  "An exceptional place that never fails to deliver high quality and great taste."
-];
+const PREFIX_DICTIONARY = {
+  'chick': 'en was crispy outside and juicy inside',
+  'fri': 'ed chicken is crunchy, flavorful and cooked to perfection',
+  'pizz': 'as here have a crispy crust and generous cheese toppings',
+  'shake': 's are thick, creamy and rich in flavor',
+  'milk': 'shakes are thick, chilled and absolutely delightful',
+  'ice': ' creams are smooth, rich and have amazing varieties',
+  'crea': 'm More ice cream specials are top notch',
+  'burg': 'er was juicy, loaded and very filling',
+  'tast': 'e is authentic, fresh and full of flavor',
+  'delic': 'ious food with great presentation and hygiene',
+  'crisp': 'y, flavorful and made fresh to order',
+  'cream': 'y, rich and satisfying in every bite',
+  'ambi': 'ence with fairy lights is cozy and peaceful',
+  'atm': 'osphere is warm, lively and perfect for hangouts',
+  'fair': 'y lights create a magical evening hangout vibe',
+  'serv': 'ice was prompt, attentive and friendly',
+  'staf': 'f are welcoming, courteous and fast',
+  'pric': 'es are very affordable and offer great value',
+  'pock': 'et-friendly pricing with generous portions',
+  'hygi': 'enic kitchen and spotless dining area',
+  'clea': 'n, well-maintained and comfortable space',
+  'high': 'ly recommend this place to all food lovers',
+  'def': 'initely coming back with family and friends',
+  'must': ' try their signature dishes and desserts',
+  'amaz': 'ing dining experience with 5-star taste',
+  'fant': 'astic food and wonderful hospitality',
+  'grea': 't taste, fast service and pleasant ambience',
+  'love': 'd every single dish we ordered here',
+  'wond': 'erful evening spent with great food and drinks'
+};
 
-const OUTRO_TEMPLATES = [
-  "Highly recommended to everyone looking for great food, desserts, and good vibes!",
-  "Will definitely be coming back again and again with friends and family!",
-  "A must-visit if you are in the area — easily a 5-star experience!",
-  "Kudos to the entire team for maintaining such high food standards and great service.",
-  "Leaving 5 stars without hesitation. Definitely worth checking out!",
-  "One of the best dining experiences around — keep up the fantastic work!"
-];
+/**
+ * Extract Business Persona & Domain Profile
+ */
+function getBusinessDomain(client) {
+  if (!client) return DOMAIN_LEXICONS.general;
+  const name = (client.business_name || '').toLowerCase();
+  const cat = (client.category || '').toLowerCase();
+  const desc = (client.description || '').toLowerCase();
 
-function shuffle(array) {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+  if (name.includes('spicy') || cat.includes('ice cream') || cat.includes('shake') || cat.includes('pizza') || desc.includes('chicken')) {
+    return DOMAIN_LEXICONS.food_dessert;
   }
-  return arr;
-}
-
-function pickRandom(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
+  if (name.includes('garden') || cat.includes('south indian') || cat.includes('dosa') || desc.includes('biryani')) {
+    return DOMAIN_LEXICONS.south_indian;
+  }
+  return DOMAIN_LEXICONS.general;
 }
 
 /**
- * Get dynamic randomized tags based on rating
- */
-function getTagsForRating(rating = 5, limit = 8) {
-  const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
-  const pool = TAG_POOLS[r] || TAG_POOLS[5];
-  return shuffle(pool).slice(0, limit);
-}
-
-/**
- * Advanced AI Review Synthesis with Dynamic Knowledge Infusion
- */
-async function generateReview({ slug, rating = 5, tags = [], previousText = '' }) {
-  const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
-  const biz = BUSINESS_KNOWLEDGE[slug] || { name: 'this place', dishes: [] };
-
-  // 1. RAGFlow Remote Agent Protocol (when active)
-  if (RAGFLOW_API_KEY && RAGFLOW_AGENT_ID) {
-    try {
-      const response = await fetch(`${RAGFLOW_API_URL}/agents/${RAGFLOW_AGENT_ID}/sessions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${RAGFLOW_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          question: `Generate a natural, enthusiastic ${r}-star Google review for ${biz.name} mentioning tags: ${tags.join(', ')}. Keep it warm, realistic, concise, and non-repetitive.`
-        })
-      });
-      const data = await response.json();
-      if (data && data.data && data.data.answer) {
-        return data.data.answer.trim();
-      }
-    } catch (err) {
-      console.warn('[RAGFlow Agent Engine] Falling back to local generative synthesizer:', err.message);
-    }
-  }
-
-  // 2. High-Entropy Semantic Synthesizer
-  const intro = pickRandom(INTRO_TEMPLATES);
-  const outro = pickRandom(OUTRO_TEMPLATES);
-
-  let bodySentences = [];
-  const pool = TAG_POOLS[r] || TAG_POOLS[5];
-
-  if (tags.length > 0) {
-    tags.forEach(selectedTag => {
-      const match = pool.find(item => item.l.toLowerCase() === selectedTag.toLowerCase() || selectedTag.includes(item.l));
-      if (match) {
-        bodySentences.push(match.phrase);
-      } else {
-        const cleanTag = selectedTag.replace(/^[^\w\s]+/, '').trim();
-        bodySentences.push(`The ${cleanTag.toLowerCase()} was exceptionally good and made with fresh ingredients.`);
-      }
-    });
-  } else {
-    const randomHighlights = shuffle(pool).slice(0, 2);
-    bodySentences = randomHighlights.map(h => h.phrase);
-  }
-
-  // Inject signature dish if 5 stars
-  if (r === 5 && biz.dishes && biz.dishes.length > 0 && Math.random() > 0.4) {
-    const dish = pickRandom(biz.dishes);
-    bodySentences.push(`Special mention to the ${dish} — completely mouth-watering.`);
-  }
-
-  const uniqueBody = Array.from(new Set(bodySentences));
-  const connectors = [' ', ' Moreover, ', ' Also, ', ' In addition, ', ' Plus, ', ' On top of that, '];
-
-  let combinedBody = '';
-  uniqueBody.forEach((sent, idx) => {
-    if (idx === 0) combinedBody += sent;
-    else {
-      const conn = connectors[Math.floor(Math.random() * connectors.length)];
-      combinedBody += conn + sent;
-    }
-  });
-
-  return `${intro} ${combinedBody} ${outro}`.replace(/\s+/g, ' ').trim();
-}
-
-/**
- * Advanced N-Gram & Contextual Multi-Word Next-Prediction Engine
+ * Deep Context-Aware Next-Word/Next-Phrase Prediction Engine
  */
 function suggestNextWords({ text = '', rating = 5, slug = '' }) {
-  if (!text) {
-    return {
-      primary: 'I really loved the food, shakes, and wonderful ambience here',
-      alternatives: [
-        'The ice creams and crispy fried chicken are amazing',
-        'Visited with friends and had a fantastic experience',
-        'Definitely one of the best food spots in town'
-      ]
-    };
-  }
-
-  const raw = text.toLowerCase();
-  const trimmed = raw.trim();
-
-  // Multi-tier Pattern Continuation Table
-  const PREDICTIONS = {
-    // Single starters
-    'i': ' really loved the food and the wonderful fairy light atmosphere here',
-    'i had': ' an extraordinary experience and thoroughly enjoyed the delicious food',
-    'i tried': ' their signature ice creams and crispy chicken — both were incredible',
-    'i ordered': ' the special pizza and thick shakes, and both tasted superb',
-    'i visited': ' this place with family and was genuinely impressed by the quality',
-    'i loved': ' every single item we ordered, especially the desserts and shakes',
-    'i would': ' highly recommend this place to everyone looking for great food',
-    'i really': ' enjoyed the warm hospitality and mouth-watering food',
-
-    // Plural / Group
-    'we': ' had a fantastic time enjoying the delicious food and great music',
-    'we tried': ' different ice cream flavours and each one was rich and creamy',
-    'we loved': ' the crispy fried chicken and freshly baked pizzas',
-    'we ordered': ' thick milkshakes and pizzas — perfectly prepared and delicious',
-    'we had': ' an amazing evening hangout here with friends',
-
-    // Food Items
-    'the': ' food quality, taste, and hospitality here are outstanding',
-    'the food': ' is freshly prepared, flavorful and served piping hot',
-    'food': ' is exceptionally fresh, flavorful and delicious in every bite',
-    'food is': ' absolutely delicious, hygienic and bursting with flavor',
-    'food was': ' extremely tasty, freshly made and served with a smile',
-    'taste': ' is genuinely authentic and top-tier in quality',
-    'taste was': ' beyond expectations — loved every single bite',
-    'the taste': ' of the dishes here is rich, fresh and memorable',
-
-    // Specific Dishes & Desserts
-    'ice cream': ' flavours are rich, smooth and delightfully creamy',
-    'ice creams': ' here are by far the best in town with so many varieties',
-    'the ice cream': ' was super creamy, rich and perfectly sweet',
-    'the ice creams': ' are creamy, delicious and full of flavor',
-    'cream more': ' ice cream specials are delightfully rich and flavorful',
-    'milkshake': ' was thick, creamy, perfectly chilled and delicious',
-    'milkshakes': ' are thick, creamy and worth every rupee',
-    'the milkshake': ' had the perfect thick consistency and rich flavour',
-    'the milkshakes': ' are thick and full of rich flavor',
-    'pizza': ' was freshly baked, hot and loaded with gooey cheese and toppings',
-    'pizzas': ' here have a crispy crust and generous delicious toppings',
-    'the pizza': ' was baked to perfection with fresh ingredients and great crust',
-    'chicken': ' is seasoned to perfection, crispy outside and juicy inside',
-    'fried chicken': ' is super crunchy, flavorful and succulent',
-    'the chicken': ' was golden crisp and cooked to perfection',
-    'the fried chicken': ' is crispy, juicy and a must-try for everyone',
-
-    // Ambience & Service
-    'service': ' was lightning fast, courteous and attentive',
-    'the service': ' was quick, attentive and very hospitable throughout',
-    'staff': ' were welcoming, friendly and made us feel right at home',
-    'the staff': ' are friendly, polite and provide prompt service',
-    'ambience': ' with fairy lights creates a magical and cozy evening vibe',
-    'the ambience': ' is modern, vibrant and perfect for evening hangouts',
-    'fairy light': ' ambience looks stunning at night and gives great photo vibes',
-    'fairy lights': ' make the place look magical, clean and comfortable',
-    'atmosphere': ' is clean, lively and great for family gatherings',
-    'clean': ' and well-maintained seating with great hygiene standards',
-
-    // Value & Conclusions
-    'prices': ' are very affordable and offer outstanding value for money',
-    'price': ' is completely reasonable for the top quality and portion size',
-    'value for': ' money is truly exceptional',
-    'great': ' food, wonderful ambience, and very warm service',
-    'best': ' food and dessert spot in the entire area',
-    'one of': ' the finest food and dessert spots in town',
-    'highly': ' recommend this wonderful place to all food lovers',
-    'definitely': ' coming back again with friends and family soon',
-    'will': ' definitely visit again and try more menu items',
-    'always': ' a pleasure visiting here — consistent quality and taste',
-    'must': ' try their signature ice creams and crispy fried chicken',
-    'worth': ' visiting for anyone looking for delicious food and great vibes'
-  };
-
-  // Check direct matches
-  for (const [trigger, continuation] of Object.entries(PREDICTIONS)) {
-    if (trimmed.endsWith(trigger)) {
+  const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
+  if (!text || text.trim().length === 0) {
+    if (r >= 4) {
       return {
-        primary: continuation,
-        alternatives: generateAlternatives(trigger)
+        primary: 'I really loved the food, shakes, and wonderful ambience here',
+        alternatives: [
+          'The ice creams and crispy fried chicken are amazing',
+          'Visited with friends and had a fantastic experience',
+          'Definitely one of the best food spots in town'
+        ]
+      };
+    } else {
+      return {
+        primary: 'Service was a bit slow, but food taste was standard',
+        alternatives: [
+          'Average experience, room for improvement in speed',
+          'Food quality was decent for the price'
+        ]
       };
     }
   }
 
-  // Keyword-based fallback
+  const raw = text.toLowerCase();
+  const trimmed = raw.trim();
   const words = trimmed.split(/\s+/);
   const lastWord = words[words.length - 1];
 
-  const WORD_PREDICTIONS = {
-    'good': ' taste, fresh ingredients and prompt service',
-    'nice': ' ambience with friendly staff and tasty food',
-    'super': ' tasty food and wonderful atmosphere',
-    'amazing': ' experience and truly delicious food',
-    'excellent': ' quality, courteous service and great value',
-    'fresh': ' ingredients, delicious taste and quick service',
-    'crispy': ' and juicy in every single bite',
-    'creamy': ' and thick with lots of delightful flavor',
-    'delicious': ' food and wonderful fairy light ambience',
-    'friendly': ' staff and great hospitality throughout',
-    'affordable': ' prices with generous portion sizes',
-    'recommend': ' visiting with friends and family for a great time'
-  };
-
-  if (WORD_PREDICTIONS[lastWord]) {
+  // 1. Partial Word Match (Auto-complete word + phrase)
+  if (lastWord.length >= 3 && PREFIX_DICTIONARY[lastWord]) {
+    const completion = PREFIX_DICTIONARY[lastWord];
     return {
-      primary: ' ' + WORD_PREDICTIONS[lastWord],
+      primary: completion,
       alternatives: [
-        ' and perfectly prepared',
-        ' with top-notch quality and great taste',
-        ' — definitely exceeded all our expectations'
+        ' ' + completion,
+        ' and wonderful hospitality throughout',
+        ' — thoroughly enjoyed our visit!'
       ]
     };
   }
 
-  // Natural flow continuation
+  // Prefix match on last word
+  for (const [prefix, completion] of Object.entries(PREFIX_DICTIONARY)) {
+    if (lastWord.length >= 3 && lastWord.startsWith(prefix)) {
+      const rest = completion.replace(new RegExp(`^${lastWord.slice(prefix.length)}`, 'i'), '');
+      return {
+        primary: rest,
+        alternatives: [' ' + completion, ' with great quality and taste']
+      };
+    }
+  }
+
+  // 2. Continuous Multi-Word Context Match
+  for (const [trigger, continuations] of Object.entries(CONTEXT_TRANSITIONS)) {
+    if (trimmed.endsWith(trigger)) {
+      const chosen = continuations[Math.floor(Math.random() * continuations.length)];
+      return {
+        primary: chosen,
+        alternatives: continuations.slice(0, 3)
+      };
+    }
+  }
+
+  // 3. Trailing Punctuation Semantic Transition (Sentence completion bridge)
+  if (trimmed.endsWith('.') || trimmed.endsWith('!') || trimmed.endsWith(',')) {
+    const bridges = [
+      ' Also, the service was lightning fast and courteous.',
+      ' In addition, the ambience with fairy lights was wonderful.',
+      ' Highly recommended to anyone looking for great taste and hygiene!',
+      ' Definitely coming back again with friends soon.'
+    ];
+    return {
+      primary: bridges[Math.floor(Math.random() * bridges.length)],
+      alternatives: bridges
+    };
+  }
+
+  // 4. Word-Class Context Fallback
+  const ADJECTIVE_MAP = {
+    'very': ' tasty, fresh, and served with a welcoming smile',
+    'super': ' crispy on the outside, juicy inside, and full of flavor',
+    'so': ' creamy, rich, and made with fresh ingredients',
+    'extremely': ' polite staff and prompt service throughout',
+    'really': ' enjoyed the peaceful ambience and delicious snacks',
+    'truly': ' an exceptional experience from start to finish',
+    'best': ' spot in town for desserts, pizzas, and crispy chicken',
+    'great': ' taste, generous portions, and pocket-friendly pricing',
+    'nice': ' fairy light ambience and great music in the background',
+    'clean': ' seating area with high hygiene standards',
+    'fresh': ' ingredients that make every dish taste authentic'
+  };
+
+  if (ADJECTIVE_MAP[lastWord]) {
+    return {
+      primary: ' ' + ADJECTIVE_MAP[lastWord],
+      alternatives: [
+        ' and delicious in every single bite',
+        ' with top-tier presentation and taste',
+        ' — completely exceeded all our expectations'
+      ]
+    };
+  }
+
+  // 5. General Fluent Extension
   return {
-    primary: 'is absolutely delicious, fresh and worth visiting',
+    primary: 'is fresh, delicious, and worth visiting again',
     alternatives: [
-      'and the staff were very friendly',
-      'with great portions and reasonable pricing',
+      'and the staff were very polite and attentive',
+      'with great portions and affordable pricing',
       'highly recommended to everyone!'
     ]
   };
 }
 
-function generateAlternatives(trigger) {
-  const ALTS = {
-    'i': ['really enjoyed the pizza and shakes', 'tried the ice creams and they were top quality', 'had a wonderful evening dinner here'],
-    'the': ['ambience and food here are outstanding', 'service was quick and staff were very polite', 'ice creams are super rich and creamy'],
-    'food': ['was fresh and served hot', 'exceeded all our expectations in taste', 'is hygienic, authentic and delicious'],
-    'service': ['was super friendly and quick', 'was attentive and courteous', 'was prompt and very helpful']
-  };
-  return ALTS[trigger] || [
-    'was freshly made and super tasty',
-    'exceeded all our expectations',
-    'is highly recommended to all!'
+/**
+ * Intelligent Dynamic Tag Matrix
+ */
+function getTagsForRating(rating = 5, limit = 8) {
+  const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
+  const fullPool = [
+    { l: '🍦 Creamy ice creams', t: 'The ice creams are exquisitely creamy, rich, and full of delightful flavours.' },
+    { l: '🥤 Thick milkshakes', t: 'The thick milkshakes are perfectly blended and an absolute treat.' },
+    { l: '🍕 Cheesy hot pizza', t: 'The pizzas are freshly baked with a golden crispy crust and plenty of cheese.' },
+    { l: '🍗 Crispy fried chicken', t: 'The fried chicken is crispy on the outside, tender and juicy inside.' },
+    { l: '⚡ Lightning fast service', t: 'The service is exceptionally prompt, and the staff are warmly welcoming.' },
+    { l: '💰 Pocket-friendly', t: 'Generous portions at very reasonable prices — outstanding value.' },
+    { l: '🌟 Fairy light ambience', t: 'The night fairy lights and vibrant ambience create a wonderful cozy vibe.' },
+    { l: '🍨 Cream More Delight', t: 'The Cream More special desserts and sundaes are top-notch and a must-try.' },
+    { l: '👨‍👩‍👧 Family friendly', t: 'A wonderful, clean environment for family gatherings and evening hangouts.' },
+    { l: '💖 Highly recommend', t: 'Hands down one of the finest food and dessert spots in town — 10/10 experience!' }
   ];
+
+  if (r === 4) {
+    return [
+      { l: '🍦 Tasty ice creams', t: 'Good variety of ice cream options and delicious taste.' },
+      { l: '🥤 Delicious shakes', t: 'Milkshakes had great consistency and rich flavour.' },
+      { l: '🍕 Fresh hot pizza', t: 'Pizza was tasty and served fresh out of the oven.' },
+      { l: '🍗 Good fried chicken', t: 'Crispy fried chicken seasoned nicely.' },
+      { l: '⚡ Friendly staff', t: 'Friendly staff and prompt response throughout our visit.' },
+      { l: '💰 Great value', t: 'Good food quality for the price paid.' },
+      { l: '🌟 Cozy atmosphere', t: 'Pleasant lighting and comfortable seating.' }
+    ];
+  }
+
+  if (r === 3) {
+    return [
+      { l: '🍦 Decent ice cream', t: 'Average ice cream options with standard quality.' },
+      { l: '🥤 Standard shakes', t: 'Milkshakes were okay and reasonably chilled.' },
+      { l: '🍕 Average pizza', t: 'Decent pizza crust and toppings.' },
+      { l: '⚡ Normal service', t: 'Service was standard and food was served on time.' },
+      { l: '💰 Fair pricing', t: 'Prices are reasonable for the portions.' }
+    ];
+  }
+
+  if (r <= 2) {
+    return [
+      { l: '⏳ Long wait time', t: 'Had to wait longer than expected for our order to arrive.' },
+      { l: '🍗 Chicken can be better', t: 'Fried chicken was a bit oily and could be crispier.' },
+      { l: '⚡ Service needs speed', t: 'Staff could be more proactive during rush hours.' },
+      { l: '❄️ Food served lukewarm', t: 'Food was not served as hot as expected.' }
+    ];
+  }
+
+  return fullPool.slice(0, limit);
+}
+
+/**
+ * Intelligent AI Review Synthesizer (AIDA Framework + High Context Lexicon)
+ */
+async function generateReview({ slug, rating = 5, tags = [], previousText = '', client = null }) {
+  const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
+  const bizName = client ? client.business_name : 'this wonderful place';
+  const domain = getBusinessDomain(client);
+
+  // 1. External LLM / RAGFlow API Engine (if configured)
+  if (OPENAI_API_KEY) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a real customer writing an authentic, vivid Google review. Write naturally in 2 to 3 concise, enthusiastic sentences without sounding robotic or repetitive.'
+            },
+            {
+              role: 'user',
+              content: `Write a ${r}-star review for ${bizName} mentioning these tags: ${tags.join(', ')}.`
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 120
+        })
+      });
+      const data = await response.json();
+      if (data && data.choices && data.choices[0]?.message?.content) {
+        return data.choices[0].message.content.trim();
+      }
+    } catch (e) {
+      console.warn('[AI Engine] External LLM unavailable, using contextual synthesizer:', e.message);
+    }
+  }
+
+  // 2. High-Entropy Semantic Synthesizer with Deep Business Context
+  const INTROS_5 = [
+    `Had a truly memorable visit to ${bizName} recently!`,
+    `Without a doubt, one of our absolute favourite spots in the area.`,
+    `Stopped by ${bizName} for an evening food and dessert trip, and loved every bit of it.`,
+    `Everything about ${bizName} was on point from start to finish.`,
+    `Such a delightful experience dining here with friends and family!`
+  ];
+
+  const OUTROS_5 = [
+    `Highly recommended to everyone looking for great food, desserts, and good vibes!`,
+    `Will definitely be coming back again and again — easily a 5-star experience!`,
+    `Kudos to the entire team for maintaining top-notch food standards and hospitality.`,
+    `Leaving 5 stars without hesitation. A must-visit spot!`
+  ];
+
+  const INTROS_LOW = [
+    `Visited ${bizName} recently.`,
+    `Had our dinner here earlier this week.`
+  ];
+
+  const OUTROS_LOW = [
+    `Hope the management works on service speed and quality improvements.`,
+    `Has good potential with better kitchen consistency.`
+  ];
+
+  const intro = r >= 4 ? INTROS_5[Math.floor(Math.random() * INTROS_5.length)] : INTROS_LOW[Math.floor(Math.random() * INTROS_LOW.length)];
+  const outro = r >= 4 ? OUTROS_5[Math.floor(Math.random() * OUTROS_5.length)] : OUTROS_LOW[Math.floor(Math.random() * OUTROS_LOW.length)];
+
+  let sentences = [];
+  const tagPool = getTagsForRating(r, 12);
+
+  if (tags.length > 0) {
+    tags.forEach(selectedTag => {
+      const match = tagPool.find(item => item.l.toLowerCase() === selectedTag.toLowerCase() || selectedTag.includes(item.l));
+      if (match && match.t) {
+        sentences.push(match.t);
+      } else {
+        const cleanTag = selectedTag.replace(/^[^\w\s]+/, '').trim();
+        sentences.push(`The ${cleanTag.toLowerCase()} was exceptionally flavorful, fresh, and well-prepared.`);
+      }
+    });
+  } else {
+    // Generate contextually from domain dishes & strengths
+    const sampleDish = domain.dishes[Math.floor(Math.random() * domain.dishes.length)];
+    const sampleQuality = domain.qualities[Math.floor(Math.random() * domain.qualities.length)];
+    sentences.push(`The ${sampleDish.toLowerCase()} was ${sampleQuality} and exceeded expectations.`);
+    sentences.push(`The staff were courteous and the ambience made for a very relaxing visit.`);
+  }
+
+  // Clean deduplication
+  const uniqueSentences = Array.from(new Set(sentences));
+  const connectors = [' ', ' Moreover, ', ' Plus, ', ' In addition, ', ' Also, '];
+
+  let body = '';
+  uniqueSentences.forEach((s, idx) => {
+    if (idx === 0) body += s;
+    else {
+      const conn = connectors[Math.floor(Math.random() * connectors.length)];
+      body += conn + s;
+    }
+  });
+
+  return `${intro} ${body} ${outro}`.replace(/\s+/g, ' ').trim();
 }
 
 module.exports = {
