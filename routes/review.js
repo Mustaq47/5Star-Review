@@ -209,20 +209,15 @@ ${isCoolSpicy ? `
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
   cursor:pointer;border:1px solid;overflow:hidden;position:relative;
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-  transition:all .2s cubic-bezier(.34,1.4,.64,1);user-select:none;
+  transition:border-color .2s, background .2s;user-select:none;
 }
 .root.light .sb{background:rgba(255,255,255,0.55);border-color:rgba(186,230,253,0.85)}
 .root.dark  .sb{background:rgba(14,165,233,0.06);border-color:rgba(56,189,248,0.16)}
-.root.light .sb.lit{background:rgba(254,215,40,0.22);border-color:rgba(251,191,36,0.6);transform:scale(1.07) translateY(-2px);box-shadow:0 7px 22px rgba(245,158,11,0.25),inset 0 1px 0 rgba(255,255,255,0.6)}
-.root.dark  .sb.lit{background:rgba(251,191,36,0.16);border-color:rgba(251,191,36,0.45);transform:scale(1.07) translateY(-2px);box-shadow:0 7px 26px rgba(245,158,11,0.35),inset 0 1px 0 rgba(255,255,255,0.08)}
-.sb.lit{animation:sPop .26s cubic-bezier(.34,1.5,.64,1) both}
-@keyframes sPop{0%{transform:scale(.65)}60%{transform:scale(1.13) translateY(-3px)}100%{transform:scale(1.07) translateY(-2px)}}
-.sb::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.18) 50%,transparent 100%);transform:translateX(-100%);pointer-events:none}
-.sb.lit::after{animation:sweep .5s ease-out forwards}
-@keyframes sweep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-.sg{font-size:24px;line-height:1;color:rgba(148,163,184,0.4);transition:all .2s;position:relative;z-index:1}
-.root.dark .sg{color:rgba(100,116,139,0.4)}
-.sb.lit .sg{color:#f59e0b !important;filter:drop-shadow(0 0 8px rgba(245,158,11,0.7))}
+.root.light .sb.lit{background:rgba(255,255,255,0.7);border-color:rgba(186,230,253,0.95);transform:none;box-shadow:none}
+.root.dark  .sb.lit{background:rgba(14,165,233,0.08);border-color:rgba(56,189,248,0.25);transform:none;box-shadow:none}
+.sg{font-size:24px;line-height:1;color:rgba(148,163,184,0.35);transition:all .22s cubic-bezier(.34,1.4,.64,1);position:relative;z-index:1}
+.root.dark .sg{color:rgba(100,116,139,0.35)}
+.sb.lit .sg{color:#f59e0b !important;transform:scale(1.18);filter:drop-shadow(0 2px 6px rgba(245,158,11,0.5))}
 .sn{font-size:9.5px;font-weight:600;font-family:'DM Mono',monospace;transition:color .3s;position:relative;z-index:1}
 .root.light .sn{color:rgba(14,116,144,0.6)}
 .root.dark  .sn{color:rgba(186,230,253,0.5)}
