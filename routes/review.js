@@ -215,9 +215,15 @@ ${isCoolSpicy ? `
 .root.dark  .sb{background:rgba(14,165,233,0.06);border-color:rgba(56,189,248,0.16)}
 .root.light .sb.lit{background:rgba(255,255,255,0.7);border-color:rgba(186,230,253,0.95);transform:none;box-shadow:none}
 .root.dark  .sb.lit{background:rgba(14,165,233,0.08);border-color:rgba(56,189,248,0.25);transform:none;box-shadow:none}
-.sg{font-size:24px;line-height:1;color:rgba(148,163,184,0.35);transition:all .22s cubic-bezier(.34,1.4,.64,1);position:relative;z-index:1}
+.sg{font-size:24px;line-height:1;color:rgba(148,163,184,0.35);transition:color .25s ease, transform .25s cubic-bezier(.34,1.5,.64,1), filter .25s ease;position:relative;z-index:1}
 .root.dark .sg{color:rgba(100,116,139,0.35)}
-.sb.lit .sg{color:#f59e0b !important;transform:scale(1.18);filter:drop-shadow(0 2px 6px rgba(245,158,11,0.5))}
+.sb.lit .sg{color:#f59e0b !important;transform:scale(1.2);filter:drop-shadow(0 2px 7px rgba(245,158,11,0.55))}
+.sb.lit.pop-wave .sg{animation:starPopWave .32s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes starPopWave{
+  0%{transform:scale(0.8);opacity:0.7}
+  55%{transform:scale(1.34)}
+  100%{transform:scale(1.2);opacity:1}
+}
 .sn{font-size:9.5px;font-weight:600;font-family:'DM Mono',monospace;transition:color .3s;position:relative;z-index:1}
 .root.light .sn{color:rgba(14,116,144,0.6)}
 .root.dark  .sn{color:rgba(186,230,253,0.5)}
@@ -577,9 +583,29 @@ function go(n) {
   if (n===2) buildPreview();
 }
 
+let starTimeouts = [];
 function rate(v) {
   rating = v;
-  document.querySelectorAll('.sb').forEach((b,i) => b.classList.toggle('lit', i<v));
+  const boxes = document.querySelectorAll('.sb');
+  
+  // Clear any existing cascade timers
+  starTimeouts.forEach(t => clearTimeout(t));
+  starTimeouts = [];
+
+  boxes.forEach((b, i) => {
+    if (i < v) {
+      const delay = i * 45; // smooth sequential ripple
+      const t = setTimeout(() => {
+        b.classList.remove('pop-wave');
+        void b.offsetWidth; // trigger reflow for smooth keyframe restart
+        b.classList.add('lit', 'pop-wave');
+      }, delay);
+      starTimeouts.push(t);
+    } else {
+      b.classList.remove('lit', 'pop-wave');
+    }
+  });
+
   document.getElementById('rchip').innerHTML =
     '<span class="rv">'+v+'.0</span><span class="rw">'+WORDS[v-1]+'</span>';
   const b = document.getElementById('btn0');
