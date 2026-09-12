@@ -82,10 +82,65 @@ const CONTEXT_TRANSITIONS = {
     ' prices are very pocket-friendly and offer incredible value for money'
   ],
   'food': [
-    ' is fresh, flavorful, and served piping hot with great presentation',
+    ' was fresh, flavorful, and served piping hot with great presentation',
     ' quality exceeded all our expectations — absolutely delicious',
     ' here is authentic, hygienic, and prepared with high quality ingredients',
     ' was served surprisingly fast and tasted super fresh'
+  ],
+  'food was': [
+    ' fresh, delicious, and prepared with top quality ingredients',
+    ' served piping hot with wonderful presentation and rich flavors',
+    ' super tasty and exceeded all our expectations'
+  ],
+  'pizza was': [
+    ' cheesy, hot, with a perfectly baked crispy golden crust',
+    ' loaded with toppings and had amazing flavor in every bite',
+    ' absolutely delicious and one of the best we have tasted'
+  ],
+  'chicken was': [
+    ' crispy on the outside, juicy inside, and seasoned to perfection',
+    ' super crunchy and full of authentic spicy flavor'
+  ],
+  'ice cream was': [
+    ' thick, creamy, rich, and made with genuine premium ingredients',
+    ' delightfully refreshing and bursting with authentic flavour'
+  ],
+  'shake was': [
+    ' thick, chilled, and packed with rich authentic flavor',
+    ' very creamy and satisfying from first sip to last'
+  ],
+  'service was': [
+    ' lightning fast, warm, and attentive throughout our visit',
+    ' courteous, prompt, and delivered with a welcoming smile'
+  ],
+  'staff were': [
+    ' extremely welcoming, helpful with recommendations, and very polite',
+    ' courteous, attentive, and maintain high hygiene standards'
+  ],
+  'ambience was': [
+    ' cozy, relaxing, and beautifully lit with fairy lights in the evening',
+    ' peaceful, clean, and perfect for family and friends hangout'
+  ],
+  'was': [
+    ' fresh, flavorful, and served with great presentation',
+    ' absolutely delicious and exceeded all our expectations',
+    ' prepared to perfection and worth every single penny',
+    ' quick, polite, and very welcoming throughout'
+  ],
+  'were': [
+    ' extremely courteous, prompt, and attentive to every detail',
+    ' delicious, rich in flavor, and served piping hot',
+    ' very impressed with the quality and hospitality'
+  ],
+  'is': [
+    ' fresh, authentic, and bursting with great flavors',
+    ' definitely one of the top spots in town for foodies',
+    ' clean, well-maintained, and very pocket-friendly'
+  ],
+  'are': [
+    ' super friendly, attentive, and ensure a memorable visit',
+    ' rich, creamy, and made with top-quality ingredients',
+    ' generous in portion size and very reasonably priced'
   ],
   'taste': [
     ' is genuinely authentic, mouth-watering, and memorable in every bite',
@@ -113,6 +168,14 @@ const CONTEXT_TRANSITIONS = {
   'price': [
     ' is very reasonable considering the generous portions and high food quality',
     ' points are pocket-friendly and give great value for every rupee spent'
+  ],
+  'highly': [
+    ' recommend this spot to all foodies, families, and dessert lovers',
+    ' satisfied with the taste, cleanliness, and wonderful hospitality'
+  ],
+  'definitely': [
+    ' coming back again soon with friends and family for another treat',
+    ' worth visiting if you appreciate great taste and quality'
   ],
   'recommend': [
     ' this spot to all foodies, families, and dessert lovers without hesitation',

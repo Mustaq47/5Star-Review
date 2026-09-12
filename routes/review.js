@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db/setup');
-const { getTagsForRating, generateReview, suggestNextWordsAsync } = require('../services/ragflowAgent');
+const { getTagsForRating, generateReview, suggestNextWords, suggestNextWordsAsync } = require('../services/ragflowAgent');
 const { generateReviewWithAgent } = require('../services/reviewWriterAgent');
 const router = express.Router();
 
