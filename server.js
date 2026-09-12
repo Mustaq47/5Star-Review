@@ -35,6 +35,14 @@ app.use(session({
   }
 }));
 
+// Normalize potential Vercel internal rewrite prefix
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api/index.js')) {
+    req.url = req.url.replace('/api/index.js', '') || '/';
+  }
+  next();
+});
+
 // Route root path: if logged-in admin, open dashboard; otherwise stay on review page
 app.get('/', (req, res) => {
   if (req.session && req.session.adminId) {
