@@ -5,7 +5,9 @@ const bcrypt = require('bcryptjs');
 
 let dbPath = path.join(__dirname, '..', 'reviewpro.db');
 
-if (process.env.VERCEL) {
+if (process.env.RAILWAY_VOLUME_MOUNT_PATH) {
+  dbPath = path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'reviewpro.db');
+} else if (process.env.VERCEL) {
   const tmpDb = '/tmp/reviewpro.db';
   try {
     if (!fs.existsSync(tmpDb)) {
