@@ -117,7 +117,7 @@ function reviewPage(client, tags) {
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>Review — ${esc(client.business_name)}</title>
 <meta name="description" content="Share your experience at ${esc(client.business_name)}">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900;1,9..40,400&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900;1,9..40,400&family=Montserrat:ital,wght@1,900&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <style>
 :root{ --brand:${color}; }
@@ -148,6 +148,18 @@ ${isCoolSpicy ? `
 ` : ''}
 
 ${isKfc ? `
+.biz-name {
+  font-family: 'Montserrat', 'DM Sans', sans-serif !important;
+  font-weight: 900 !important;
+  font-style: italic !important;
+  letter-spacing: 0.8px !important;
+  text-transform: uppercase !important;
+  font-size: 26px !important;
+}
+.root.light .biz-name { color: #e4002b !important; }
+.root.dark  .biz-name { color: #ff2a40 !important; }
+.root.light .biz-cat  { color: #000000 !important; font-weight: 700 !important; }
+.root.dark  .biz-cat  { color: #ffffff !important; font-weight: 700 !important; }
 .bp {
   background: linear-gradient(135deg, #e4002b 0%, #b91c1c 100%) !important;
   border-color: rgba(255,255,255,0.2) !important;
@@ -165,8 +177,6 @@ ${isKfc ? `
 .root.dark  .o2{background:radial-gradient(circle,rgba(220,38,38,0.30) 0%,transparent 70%) !important}
 .root.light .o3{background:radial-gradient(circle,rgba(251,113,133,0.18) 0%,transparent 70%) !important}
 .root.dark  .o3{background:radial-gradient(circle,rgba(185,28,28,0.26) 0%,transparent 70%) !important}
-.biz-cat { color: #e4002b !important; }
-.root.dark .biz-cat { color: #fb7185 !important; }
 .root.light .hdr{border-color:rgba(254,205,211,0.8) !important}
 .root.dark  .hdr{border-color:rgba(244,63,94,0.2) !important}
 .root.light .dot{background:rgba(254,205,211,0.85) !important}
