@@ -877,7 +877,6 @@ function onTA() {
     .catch(() => {});
   }, 50);
 }
-}
 
 function acceptSuggestion() {
   if (sugg) {
