@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db/setup');
-const { getTagsForRating, generateReview, suggestNextWords } = require('../services/ragflowAgent');
+const { getTagsForRating, generateReview, suggestNextWordsAsync } = require('../services/ragflowAgent');
 const { generateReviewWithAgent } = require('../services/reviewWriterAgent');
 const router = express.Router();
 
@@ -53,15 +53,33 @@ router.post('/:slug/generate', async (req, res) => {
   }
 });
 
-// RAGFlow Agent Next-Word Prediction API
-router.post('/:slug/suggest', (req, res) => {
+// RAGFlow/Gemini Agent Next-Word Prediction API
+router.post('/:slug/suggest', async (req, res) => {
   const { text, rating } = req.body;
-  const suggestion = suggestNextWords({
+  const suggestion = await suggestNextWordsAsync({
     text: text || '',
     rating: parseInt(rating) || 5,
     slug: req.params.slug
   });
   res.json({ ok: true, suggestion });
+});
+
+// Poll endpoint: returns the cached/best Gemini result once ready.
+router.post('/:slug/suggest/enhance', async (req, res) => {
+  const { text, rating } = req.body;
+  const input = {
+    text: (text || '').trim(),
+    rating: parseInt(rating) || 5,
+    slug: req.params.slug
+  };
+  if (!input.text) return res.json({ ok: true, ready: false });
+  try {
+    const suggestion = await suggestNextWordsAsync({ ...input, poll: true });
+    const ready = suggestion.enhancing === false;
+    res.json({ ok: true, ready, suggestion });
+  } catch (e) {
+    res.json({ ok: true, ready: false });
+  }
 });
 
 router.post('/:slug/click', (req, res) => {
@@ -302,6 +320,17 @@ ${isCoolSpicy ? `
 .th-badge{
   background:rgba(14,165,233,0.15);border-radius:4px;padding:1px 5px;font-size:10px;
 }
+.alts{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:6px;}
+.alt-chip{
+  font-size:11px;font-family:'DM Mono',monospace;padding:3px 8px;border-radius:8px;
+  cursor:pointer;border:1px solid transparent;transition:all .2s;
+  background:rgba(14,165,233,0.10);color:#0284c7;
+  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.root.dark  .alt-chip{color:#7dd3fc;background:rgba(56,189,248,0.10);border-color:rgba(56,189,248,0.18)}
+.root.light .alt-chip{border-color:rgba(2,132,199,0.22)}
+.alt-chip:hover{transform:translateY(-1px);}
+.alt-chip:active{transform:translateY(0);}
 
 /* ── SECTION LABEL ── */
 .sl{
@@ -455,6 +484,7 @@ ${isCoolSpicy ? `
         </div>
 
         <div class="th" id="th" onclick="acceptSuggestion()"></div>
+        <div class="alts" id="alts"></div>
 
         <div class="sl">Quick tags</div>
         <div class="tags" id="tags"></div>
@@ -508,6 +538,7 @@ const PLACE_ID = '${esc(client.place_id)}';
 const SLUG     = '${esc(client.slug)}';
 
 let dark=false, rating=5, sugg='', sgT=null, activeTags=new Set();
+let sugGen = 0; // guard against stale async suggestions overwriting newer text
 
 function esc(s) {
   if (!s) return '';
@@ -626,6 +657,60 @@ function regenerateReview() {
 
 let currentAlts = [];
 
+function pollSuggestionEnhance(text, rating, attempt, gen) {
+  // Ignore stale polls if the user has typed new text since this poll began.
+  if (gen !== sugGen) return;
+  // Refresh the badge to hint the smarter result is still on its way.
+  const th = document.getElementById('th');
+  if (th && attempt === 0) {
+    th.innerHTML = '<span class="th-badge">⚡ Enhancing with Gemini…</span> <span style="opacity:0.6;font-size:10px">giving even better suggestions</span>';
+  }
+  if (attempt > 8) return; // ~6s max: 8 × 800ms
+
+  setTimeout(() => {
+    if (gen !== sugGen) return;
+    fetch('/r/' + SLUG + '/suggest/enhance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, rating })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (gen !== sugGen || !data.ok) return;
+      if (data.ready && data.suggestion) {
+        applySuggestion(data.suggestion);
+      } else {
+        pollSuggestionEnhance(text, rating, attempt + 1, gen);
+      }
+    })
+    .catch(() => {
+      pollSuggestionEnhance(text, rating, attempt + 1, gen);
+    });
+  }, attempt === 0 ? 1200 : 800);
+}
+
+function applySuggestion(suggestion) {
+  const prim = typeof suggestion === 'string' ? suggestion : suggestion.primary;
+  const alts = suggestion.alternatives || [];
+  sugg = prim || '';
+  currentAlts = alts;
+  const ta = document.getElementById('ta');
+  if (!ta) return;
+
+  if (sugg) {
+    document.getElementById('th').innerHTML =
+      '<span class="th-badge">⚡ Gemini Suggestion</span> <span style="opacity:0.9">' + esc(sugg) + '</span> <span style="opacity:0.6;font-size:10px">(Tab or tap to complete)</span>';
+    document.getElementById('ghost').innerHTML =
+      esc(ta.value) + '<span class="gs">' + esc(sugg) + '</span>';
+  }
+  const altRow = document.getElementById('alts');
+  if (altRow) {
+    altRow.innerHTML = currentAlts.map(alt =>
+      '<span class="alt-chip" title="Click to use this sentence" onclick="acceptSuggestion(' + JSON.stringify(alt) + ')">' + esc(alt) + '</span>'
+    ).join('');
+  }
+}
+
 function onTA() {
   clrS();
   const ta = document.getElementById('ta');
@@ -633,6 +718,7 @@ function onTA() {
   if (!v || v.trim().length === 0) return;
 
   clearTimeout(sgT);
+  const myGen = ++sugGen;
   sgT = setTimeout(() => {
     fetch('/r/' + SLUG + '/suggest', {
       method: 'POST',
@@ -647,12 +733,25 @@ function onTA() {
         
         sugg = prim || '';
         currentAlts = alts;
+        const geminiMode = data.suggestion && data.suggestion.source === 'gemini';
 
         if (sugg) {
           document.getElementById('th').innerHTML =
-            '<span class="th-badge">AI Prediction</span> <span style="opacity:0.9">' + esc(sugg) + '</span> <span style="opacity:0.6;font-size:10px">(Tab or tap to complete)</span>';
+            '<span class="th-badge">' + (geminiMode ? '⚡ Gemini Suggestion' : 'AI Prediction') + '</span> <span style="opacity:0.9">' + esc(sugg) + '</span> <span style="opacity:0.6;font-size:10px">(Tab or tap to complete)</span>';
           document.getElementById('ghost').innerHTML =
             esc(ta.value) + '<span class="gs">' + esc(sugg) + '</span>';
+        }
+
+        const altRow = document.getElementById('alts');
+        if (altRow) {
+          altRow.innerHTML = currentAlts.map(alt =>
+            '<span class="alt-chip" title="Click to use this sentence" onclick="acceptSuggestion(' + JSON.stringify(alt) + ')">' + esc(alt) + '</span>'
+          ).join('');
+        }
+
+        // If the server is still enhancing with Gemini, poll for the upgraded result.
+        if (data.suggestion && data.suggestion.enhancing) {
+          pollSuggestionEnhance(v, rating, 0, myGen);
         }
       }
     })
@@ -681,7 +780,7 @@ function onKey(e) {
 }
 
 function clrS() { clearTimeout(sgT); clrG(); document.getElementById('th').textContent=''; }
-function clrG() { sugg=''; currentAlts=[]; document.getElementById('ghost').innerHTML=''; }
+function clrG() { sugg=''; currentAlts=[]; document.getElementById('ghost').innerHTML=''; const a=document.getElementById('alts'); if(a) a.innerHTML=''; }
 
 function buildPreview() {
   const txt = document.getElementById('ta').value.trim();
