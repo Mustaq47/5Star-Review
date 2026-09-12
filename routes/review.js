@@ -177,8 +177,8 @@ ${isKfc ? `
 .root.dark  .mode-btn{background:rgba(228,0,43,0.12);border:1px solid rgba(244,63,94,0.25)}
 .root.light .glass{background:rgba(255,255,255,0.68);border:1px solid rgba(255,255,255,0.95);box-shadow:0 12px 48px rgba(228,0,43,0.12),inset 0 1px 0 rgba(255,255,255,0.95)}
 .root.dark  .glass{background:rgba(26,6,10,0.65);border:1px solid rgba(244,63,94,0.22);box-shadow:0 12px 52px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.06)}
-.root.light .biz-logo{background:rgba(255,255,255,0.9);border:1px solid rgba(254,205,211,0.95);box-shadow:0 3px 14px rgba(228,0,43,0.15)}
-.root.dark  .biz-logo{background:rgba(228,0,43,0.1);border:1px solid rgba(244,63,94,0.3)}
+.root.light .biz-logo{background:transparent !important;border:none !important;box-shadow:none !important}
+.root.dark  .biz-logo{background:transparent !important;border:none !important;box-shadow:none !important}
 .root.light .sb{background:rgba(255,255,255,0.6);border-color:rgba(254,205,211,0.85)}
 .root.dark  .sb{background:rgba(228,0,43,0.08);border-color:rgba(244,63,94,0.2)}
 .root.light .sb.lit{background:rgba(255,255,255,0.85);border-color:rgba(254,205,211,0.95)}
@@ -259,14 +259,15 @@ ${isKfc ? `
 .root.dark  .hdr{border-color:rgba(56,189,248,0.14)}
 
 .biz-logo{
-  width:56px;height:56px;border-radius:16px;flex-shrink:0;
+  width:56px;height:56px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;font-size:26px;
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:all .4s;
+  transition:all .4s;
   overflow:hidden;padding:0;
+  background:transparent;border:none;box-shadow:none;
 }
-.biz-logo img{width:100%;height:100%;object-fit:cover;display:block}
-.root.light .biz-logo{background:rgba(255,255,255,0.8);border:1px solid rgba(186,230,253,0.9);box-shadow:0 3px 14px rgba(14,116,144,0.14)}
-.root.dark  .biz-logo{background:rgba(14,165,233,0.08);border:1px solid rgba(56,189,248,0.2)}
+.biz-logo img{width:100%;height:100%;object-fit:contain;display:block}
+.root.light .biz-logo{background:transparent;border:none;box-shadow:none}
+.root.dark  .biz-logo{background:transparent;border:none;box-shadow:none}
 
 .biz-name{font-size:19px;font-weight:700;letter-spacing:-0.3px;line-height:1.2;margin-bottom:3px;transition:color .4s}
 .root.light .biz-name{color:#0c2340}
