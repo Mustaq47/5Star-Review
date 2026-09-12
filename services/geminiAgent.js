@@ -182,13 +182,18 @@ async function suggestWithGemini({ text, rating = 5, businessName = '', business
 //  CORE: Gemini API caller
 // ═══════════════════════════════════════════════════════════════
 
-async function callGemini(prompt, { temperature = 0.95, maxTokens = 300, systemInstruction = '' } = {}) {
+async function callGemini(prompt, { temperature = 0.95, maxTokens = 800, systemInstruction = '' } = {}) {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set');
 
   const url = `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
   const body = {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature, maxOutputTokens: maxTokens, topP: 0.95, topK: 40 },
+    generationConfig: {
+      temperature,
+      maxOutputTokens: Math.max(maxTokens, 800),
+      topP: 0.95,
+      thinkingConfig: { thinkingBudget: 0 }
+    },
   };
   if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
 
