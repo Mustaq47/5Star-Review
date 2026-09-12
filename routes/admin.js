@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const QRCode = require('qrcode');
 const db = require('../db/setup');
 const { requireAuth } = require('../middleware/auth');
+const { generateReviewWithAgent } = require('../services/reviewWriterAgent');
 const router = express.Router();
 
 // ── AUTH ──────────────────────────────────────────────────────────
@@ -96,6 +97,26 @@ router.get('/clients/:id/analytics', requireAuth, (req, res) => {
   const totalClicks = db.prepare('SELECT COUNT(*) as n FROM review_clicks WHERE client_id=?').get(client.id).n;
   const convRate = totalViews > 0 ? ((totalClicks/totalViews)*100).toFixed(1) : 0;
   res.send(analyticsPage(client, { dailyViews, dailyClicks, totalViews, totalClicks, convRate }));
+});
+
+// ── AGENT TESTER ─────────────────────────────────────────────────
+router.get('/agent-test', requireAuth, (req, res) => {
+  res.send(agentTestPage());
+});
+
+router.post('/agent-test/generate', requireAuth, async (req, res) => {
+  try {
+    const { rating, businessName, businessType, userText } = req.body;
+    const result = await generateReviewWithAgent({
+      rating: String(rating || ''),
+      businessName: String(businessName || ''),
+      businessType: String(businessType || ''),
+      userText: String(userText || '')
+    });
+    res.json({ ok: true, source: result.source, review: result.review });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // ── HELPERS ───────────────────────────────────────────────────────
@@ -249,6 +270,7 @@ code{background:var(--s3);padding:1px 7px;border-radius:5px;font-family:'DM Mono
   </div>
   <div class="nav">
     <a href="/admin" class="nav-a"><i class="ti ti-layout-dashboard"></i>Dashboard</a>
+    <a href="/admin/agent-test" class="nav-a"><i class="ti ti-sparkles"></i>Agent Test</a>
     <a href="/admin/clients/new" class="nav-a"><i class="ti ti-plus"></i>Add Client</a>
     <a href="/admin/logout" class="nav-a danger"><i class="ti ti-logout"></i>Logout</a>
   </div>
@@ -631,6 +653,94 @@ function analyticsPage(client, stats) {
 
     new Chart(document.getElementById('viewChart'), cfg(days, vVals, '#a78bfa'));
     new Chart(document.getElementById('clickChart'), cfg(days, cVals, '#fbbf24'));
+    </script>
+  `);
+}
+
+function agentTestPage() {
+  return shell('Agent Test — review-writer', `
+    <div class="page-hdr">
+      <div>
+        <div class="page-title">review-writer agent test</div>
+        <div class="page-sub">Test the review-writer agent: honest, positive-only Google reviews in seconds</div>
+      </div>
+      <a href="/admin" class="btn btn-ghost"><i class="ti ti-arrow-left"></i> Back</a>
+    </div>
+
+    <div class="card card-p" style="max-width:860px;margin:0 auto">
+      <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--t3);margin-bottom:18px">Inputs</div>
+      <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px">
+        <div>
+          <label class="f-lbl">Rating</label>
+          <select id="at-rating" class="inp">
+            <option value="5" selected>5 — Loved it</option>
+            <option value="4">4 — Great</option>
+            <option value="3">3 — Okay</option>
+            <option value="2">2 — Meh</option>
+            <option value="1">1 — Poor</option>
+          </select>
+        </div>
+        <div>
+          <label class="f-lbl">Business name</label>
+          <input id="at-name" class="inp" placeholder="e.g. Spice Garden" value="">
+        </div>
+        <div>
+          <label class="f-lbl">Business type</label>
+          <input id="at-type" class="inp" placeholder="e.g. restaurant" value="">
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px">
+        <label class="f-lbl">Your experience (separate textarea for the agent)</label>
+        <textarea id="at-text" class="inp txta" rows="4" placeholder="Describe your visit: what you ordered, the service, ambience, anything that fell short..."></textarea>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <button id="at-go" class="btn btn-primary" onclick="atGenerate()"><i class="ti ti-sparkles"></i> Generate review</button>
+        <span id="at-status" class="page-sub" style="margin-left:auto"></span>
+      </div>
+
+      <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--t3);margin-bottom:8px">Generated review</div>
+      <textarea id="at-out" class="inp txta" rows="5" readonly placeholder="The generated 2-4 sentence English review appears here..."></textarea>
+      <div id="at-meta" class="page-sub" style="margin-top:8px;font-size:12px"></div>
+    </div>
+
+    <script>
+      async function atGenerate() {
+        const st = document.getElementById('at-status');
+        const out = document.getElementById('at-out');
+        st.textContent = 'Generating...';
+        st.style.color = 'var(--yellow)';
+        out.value = '';
+        try {
+          const r = await fetch('/admin/agent-test/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              rating: document.getElementById('at-rating').value,
+              businessName: document.getElementById('at-name').value,
+              businessType: document.getElementById('at-type').value,
+              userText: document.getElementById('at-text').value
+            })
+          });
+          const data = await r.json();
+          if (data.ok) {
+            out.value = data.review;
+            st.textContent = 'Done via ' + data.source;
+            st.style.color = 'var(--green)';
+            document.getElementById('at-meta').textContent = 'Powered by the review-writer OpenHands agent — ' + (data.source === 'local' ? 'local template fallback' : data.source + ' backend');
+          } else {
+            st.textContent = 'Error: ' + (data.error || 'unknown');
+            st.style.color = 'var(--red)';
+          }
+        } catch (e) {
+          st.textContent = 'Error: ' + e.message;
+          st.style.color = 'var(--red)';
+        }
+      }
+      document.getElementById('at-text').addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') atGenerate();
+      });
     </script>
   `);
 }

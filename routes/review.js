@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db/setup');
 const { getTagsForRating, generateReview, suggestNextWords } = require('../services/ragflowAgent');
+const { generateReviewWithAgent } = require('../services/reviewWriterAgent');
 const router = express.Router();
 
 router.get('/:slug', (req, res) => {
@@ -18,13 +19,31 @@ router.get('/:slug/tags', (req, res) => {
   res.json({ ok: true, tags });
 });
 
-// RAGFlow Agent Review Generator API (Zero repetition)
+// Review Generator API: prefer the review-writer agent when an LLM backend is
+// configured; otherwise keep the existing RAGFlow/business-knowledge flow.
 router.post('/:slug/generate', async (req, res) => {
   const { rating, tags, previousText } = req.body;
+  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  const ratingNum = parseInt(rating) || 5;
   try {
+    if (client) {
+      const agentResult = await generateReviewWithAgent({
+        rating: String(ratingNum),
+        businessName: client.business_name,
+        businessType: client.category,
+        userText: previousText || ''
+      });
+      // Only use the agent when an LLM backend was actually reached(i.e. not the
+      // generic local fallback); otherwise keep the richer business-knowledge flow.
+
+      if (agentResult.source !== 'local') {
+        res.json({ ok: true, review: agentResult.review });
+        return;
+      }
+    }
     const review = await generateReview({
       slug: req.params.slug,
-      rating: parseInt(rating) || 5,
+      rating: ratingNum,
       tags: Array.isArray(tags) ? tags : [],
       previousText: previousText || ''
     });
