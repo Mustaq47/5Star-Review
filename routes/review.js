@@ -157,6 +157,8 @@ p{font-size:14px;color:#94a3b8;line-height:1.6;margin-bottom:24px}
 
 function reviewPage(client, tags) {
   const color = client.primary_color || '#0284c7';
+  const primaryTheme = client.primary_theme || 'dark';
+  const allowToggle = client.allow_theme_toggle !== 0 && client.allow_theme_toggle !== '0' && client.allow_theme_toggle !== false;
   const tagsJson = JSON.stringify(tags).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
   const isCoolSpicy = client.slug === 'cool-and-spicy';
   const isKfc = client.slug === 'kfc';
@@ -191,46 +193,32 @@ function reviewPage(client, tags) {
 .root.dark .c-and{color:#38bdf8;text-shadow:0 0 10px rgba(56,189,248,0.45)}
 .root.dark .c-spicy{color:#ff2a34;text-shadow:0 0 14px rgba(255,42,52,0.45)}
 
+${!isCoolSpicy && !isKfc ? `
+.bp {
+  background: linear-gradient(135deg, ${color} 0%, ${color}d0 100%) !important;
+  border-color: rgba(255,255,255,0.25) !important;
+  box-shadow: 0 6px 24px ${color}45, inset 0 1px 0 rgba(255,255,255,0.3) !important;
+}
+.root.light .o1{background:radial-gradient(circle,${color}30 0%,transparent 70%) !important}
+.root.dark  .o1{background:radial-gradient(circle,${color}40 0%,transparent 70%) !important}
+.root.light .tag.on { background: ${color} !important; border-color: ${color} !important; color: #ffffff !important; box-shadow:0 2px 10px ${color}40 !important; }
+.root.dark .tag.on { background: ${color} !important; border-color: ${color} !important; color: #ffffff !important; box-shadow:0 2px 10px ${color}50 !important; }
+.root.light .biz-cat { color: ${color} !important; }
+.root.dark .biz-cat { color: ${color} !important; }
+` : ''}
+
 ${isCoolSpicy ? `
 .bp {
   background: linear-gradient(135deg, #1d4ed8 0%, #dc2626 100%) !important;
-  border-color: rgba(255,255,255,0.25) !important;
-  box-shadow: 0 6px 24px rgba(220,38,38,0.28) !important;
+  border-color: rgba(255,255,255,0.2) !important;
+  box-shadow: 0 6px 24px rgba(220,38,38,0.32) !important;
 }
-.root.light {
-  background: #ffffff !important;
-}
-.root.light .o1{background:radial-gradient(circle,rgba(29,78,216,0.06) 0%,transparent 70%) !important}
-.root.light .o2{background:radial-gradient(circle,rgba(239,68,68,0.05) 0%,transparent 70%) !important}
-.root.light .o3{background:radial-gradient(circle,rgba(14,165,233,0.05) 0%,transparent 70%) !important}
-.root.light .hdr{border-bottom:1px solid #f1f5f9 !important}
-.root.light .glass{
-  background:#ffffff !important;
-  border:1px solid #e2e8f0 !important;
-  box-shadow:0 16px 48px -12px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.03) !important;
-}
-.root.light .mode-btn{background:#f8fafc;border:1px solid #e2e8f0;box-shadow:0 2px 8px rgba(0,0,0,0.04);color:#334155}
-.root.light .dot{background:#e2e8f0 !important}
-.root.light .dot.on{background:#2563eb !important}
-.root.light .sb{background:#f8fafc !important;border-color:#e2e8f0 !important;color:#64748b}
-.root.light .sb.lit{background:#eff6ff !important;border-color:#93c5fd !important;color:#2563eb}
-.root.light .rchip{background:#f8fafc !important;border-color:#e2e8f0 !important;color:#1e293b}
-.root.light .tw{background:#ffffff !important;border-color:#e2e8f0 !important;box-shadow:0 2px 8px rgba(0,0,0,0.02) !important}
-.root.light .tw:focus-within{border-color:#2563eb !important;box-shadow:0 0 0 3px rgba(37,99,235,0.12) !important}
-.root.light .ta{color:#0f172a !important;caret-color:#2563eb !important}
-.root.light .ta-mirror .sugg{color:#2563eb !important}
-.root.light .tag{background:#f8fafc !important;border:1px solid #e2e8f0 !important;color:#334155 !important}
-.root.light .tag:hover{background:#f1f5f9 !important;border-color:#cbd5e1 !important;color:#0f172a !important}
-.root.light .tag.selected{background:#eff6ff !important;border-color:#3b82f6 !important;color:#1d4ed8 !important;box-shadow:0 2px 8px rgba(59,130,246,0.14) !important}
-.root.light .custom-prompt-toggle{background:#f8fafc !important;border-color:#e2e8f0 !important;color:#2563eb !important}
-.root.light .custom-prompt-box{background:#f8fafc !important;border-color:#e2e8f0 !important}
-.root.light .pill-input{background:#ffffff !important;border-color:#e2e8f0 !important;color:#0f172a !important}
-.root.light .pill-input:focus{border-color:#2563eb !important;box-shadow:0 0 0 3px rgba(37,99,235,0.1) !important}
-.root.light .rbox{background:#f8fafc !important;border-color:#e2e8f0 !important;color:#0f172a !important}
-.root.light .snote{background:#eff6ff !important;border-color:#dbeafe !important;color:#1e40af !important}
-.root.light .snote strong{color:#1e3a8a !important}
-.root.light .bg{background:#f8fafc !important;border-color:#e2e8f0 !important;color:#475569 !important}
-.root.light .bs{background:#eff6ff !important;border-color:#bfdbfe !important;color:#1d4ed8 !important}
+.root.light .o1{background:radial-gradient(circle,rgba(29,78,216,0.26) 0%,transparent 70%) !important}
+.root.dark  .o1{background:radial-gradient(circle,rgba(29,78,216,0.36) 0%,transparent 70%) !important}
+.root.light .o2{background:radial-gradient(circle,rgba(239,68,68,0.22) 0%,transparent 70%) !important}
+.root.dark  .o2{background:radial-gradient(circle,rgba(220,38,38,0.32) 0%,transparent 70%) !important}
+.root.light .o3{background:radial-gradient(circle,rgba(14,165,233,0.2) 0%,transparent 70%) !important}
+.root.dark  .o3{background:radial-gradient(circle,rgba(14,165,233,0.24) 0%,transparent 70%) !important}
 .biz-cat { color: #0284c7 !important; }
 .root.dark .biz-cat { color: #38bdf8 !important; }
 ` : ''}
@@ -665,13 +653,13 @@ ${isKfc ? `
 </style>
 </head>
 <body>
-<div class="root ${isCoolSpicy ? 'light' : 'dark'}" id="root">
+<div class="root ${primaryTheme === 'light' ? 'light' : 'dark'}" id="root">
   <div class="orb o1"></div>
   <div class="orb o2"></div>
   <div class="orb o3"></div>
 
   <div class="shell">
-    <button class="mode-btn" id="modeBtn" onclick="toggleMode()" aria-label="Toggle light mode">${isCoolSpicy ? '☀️' : '🌙'}</button>
+    ${allowToggle ? `<button class="mode-btn" id="modeBtn" onclick="toggleMode()" aria-label="Toggle light/dark mode">${primaryTheme === 'light' ? '☀️' : '🌙'}</button>` : '<div style="height:16px"></div>'}
 
     <div class="glass">
 
@@ -780,8 +768,14 @@ const WORDS = ['Terrible','Poor','Okay','Good','Excellent'];
 let CURRENT_TAGS = ${tagsJson};
 const PLACE_ID = '${esc(client.place_id)}';
 const SLUG     = '${esc(client.slug)}';
+const PRIMARY_THEME = '${esc(primaryTheme)}';
+const ALLOW_TOGGLE  = ${allowToggle ? 'true' : 'false'};
 
-let dark=${isCoolSpicy ? 'false' : 'true'}, rating=5, sugg='', sgT=null, activeTags=new Set();
+let dark = PRIMARY_THEME !== 'light';
+if (PRIMARY_THEME === 'system' && window.matchMedia) {
+  dark = !window.matchMedia('(prefers-color-scheme: light)').matches;
+}
+let rating=5, sugg='', sgT=null, activeTags=new Set();
 let sugGen = 0; // guard against stale async suggestions overwriting newer text
 
 function esc(s) {
@@ -789,10 +783,25 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function applyTheme(isDark) {
+  dark = isDark;
+  const rootEl = document.getElementById('root');
+  if (rootEl) rootEl.className = 'root ' + (dark ? 'dark' : 'light');
+  const modeBtn = document.getElementById('modeBtn');
+  if (modeBtn) modeBtn.textContent = dark ? '🌙' : '☀️';
+}
+
+applyTheme(dark);
+
+if (PRIMARY_THEME === 'system' && window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    if (PRIMARY_THEME === 'system') applyTheme(e.matches);
+  });
+}
+
 function toggleMode() {
-  dark = !dark;
-  document.getElementById('root').className = 'root ' + (dark?'dark':'light');
-  document.getElementById('modeBtn').textContent = dark ? '🌙' : '☀️';
+  if (!ALLOW_TOGGLE) return;
+  applyTheme(!dark);
 }
 
 function go(n) {

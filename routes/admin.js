@@ -87,13 +87,15 @@ function getExpiryInfo(client) {
 }
 
 router.post('/clients/new', requireAuth, (req, res) => {
-  const { business_name, category, description, emoji, place_id, primary_color, tags_input, expiry_type, custom_expires_at } = req.body;
+  const { business_name, category, description, emoji, place_id, primary_color, primary_theme, allow_theme_toggle, tags_input, expiry_type, custom_expires_at } = req.body;
   const slug = business_name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + Date.now().toString(36);
   const tags = parseTags(tags_input);
   const expires_at = calculateExpiry(expiry_type, custom_expires_at);
+  const themeMode = ['dark', 'light', 'system'].includes(primary_theme) ? primary_theme : 'dark';
+  const allowToggle = (allow_theme_toggle === 'off' || allow_theme_toggle === '0' || allow_theme_toggle === 0) ? 0 : 1;
   try {
-    db.prepare('INSERT INTO clients (slug,business_name,category,description,emoji,place_id,primary_color,tags,expires_at) VALUES (?,?,?,?,?,?,?,?,?)')
-      .run(slug, business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', JSON.stringify(tags), expires_at);
+    db.prepare('INSERT INTO clients (slug,business_name,category,description,emoji,place_id,primary_color,primary_theme,allow_theme_toggle,tags,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .run(slug, business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', themeMode, allowToggle, JSON.stringify(tags), expires_at);
     res.redirect('/admin');
   } catch(e) {
     res.redirect('/admin/clients/new?error=' + encodeURIComponent(e.message));
@@ -107,11 +109,13 @@ router.get('/clients/:id/edit', requireAuth, (req, res) => {
 });
 
 router.post('/clients/:id/edit', requireAuth, (req, res) => {
-  const { business_name, category, description, emoji, place_id, primary_color, tags_input, active, expiry_type, custom_expires_at } = req.body;
+  const { business_name, category, description, emoji, place_id, primary_color, primary_theme, allow_theme_toggle, tags_input, active, expiry_type, custom_expires_at } = req.body;
   const tags = parseTags(tags_input);
   const expires_at = calculateExpiry(expiry_type, custom_expires_at);
-  db.prepare('UPDATE clients SET business_name=?,category=?,description=?,emoji=?,place_id=?,primary_color=?,tags=?,active=?,expires_at=? WHERE id=?')
-    .run(business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', JSON.stringify(tags), active==='on'?1:0, expires_at, req.params.id);
+  const themeMode = ['dark', 'light', 'system'].includes(primary_theme) ? primary_theme : 'dark';
+  const allowToggle = (allow_theme_toggle === 'off' || allow_theme_toggle === '0' || allow_theme_toggle === 0) ? 0 : 1;
+  db.prepare('UPDATE clients SET business_name=?,category=?,description=?,emoji=?,place_id=?,primary_color=?,primary_theme=?,allow_theme_toggle=?,tags=?,active=?,expires_at=? WHERE id=?')
+    .run(business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', themeMode, allowToggle, JSON.stringify(tags), active==='on'?1:0, expires_at, req.params.id);
   res.redirect('/admin');
 });
 
@@ -393,6 +397,8 @@ function dashboardPage(clients) {
     : clients.map(c => {
         const cr = c.views > 0 ? ((c.clicks/c.views)*100).toFixed(0) : 0;
         const expInfo = getExpiryInfo(c);
+        const themeLabel = c.primary_theme === 'light' ? '☀️ Light' : (c.primary_theme === 'system' ? '📱 Auto' : '🌙 Dark');
+        const themeColor = c.primary_color || '#7c4dff';
         return `<tr>
           <td>
             <div class="biz-cell">
@@ -404,6 +410,13 @@ function dashboardPage(clients) {
             </div>
           </td>
           <td><span class="badge badge-purple">${esc(c.category)}</span></td>
+          <td>
+            <span class="badge" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:var(--t1);display:inline-flex;align-items:center;gap:6px">
+              <span style="width:8px;height:8px;border-radius:50%;background:${esc(themeColor)};display:inline-block;box-shadow:0 0 6px ${esc(themeColor)}"></span>
+              ${themeLabel}
+            </span>
+            ${c.allow_theme_toggle === 0 ? '<div class="text-xs mt4" style="color:var(--yellow);font-size:10px">🔒 Locked</div>' : ''}
+          </td>
           <td>
             <div class="mono" style="font-size:15px;color:#f0e8ff">${c.views}</div>
             <div class="text-xs mt4" style="color:var(--t3)">${c.today} today</div>
@@ -470,6 +483,7 @@ function dashboardPage(clients) {
         <thead><tr>
           <th>Business</th>
           <th>Category</th>
+          <th>Theme</th>
           <th>Views</th>
           <th>Clicks</th>
           <th>QR Status &amp; Timer</th>
@@ -488,6 +502,8 @@ function clientFormPage(client, error) {
   const defaultTags = 'Great food|The food here is absolutely delicious — highly recommend!\nFriendly staff|Staff are warm, welcoming and very attentive.\nFast service|Service was quick and efficient without any wait.\nGreat value|Excellent value for money — generous portions at fair prices.\nClean space|The place is spotless and well maintained.\nWill visit again|Loved the overall experience — will definitely be back!';
   const tagsStr = client ? JSON.parse(client.tags||'[]').map(t=>`${t.l}|${t.t}`).join('\n') : defaultTags;
   const expInfo = client ? getExpiryInfo(client) : null;
+  const currentTheme = client?.primary_theme || 'dark';
+  const allowToggle = client ? (client.allow_theme_toggle !== 0 && client.allow_theme_toggle !== false) : true;
 
   return shell(isEdit ? 'Edit — '+client.business_name : 'New Client', `
     <div class="page-hdr">
@@ -520,19 +536,66 @@ function clientFormPage(client, error) {
             <textarea class="form-textarea" name="description" placeholder="Tell customers what makes this place special…" required>${esc(client?.description||'')}</textarea>
           </div>
 
-          <div class="form-2col">
-            <div class="form-group">
-              <label class="form-label">Emoji icon</label>
-              <input class="form-input" type="text" name="emoji" value="${esc(client?.emoji||'🏪')}" placeholder="🏪" maxlength="6">
-              <span class="form-hint">Single emoji that represents the business</span>
+          <div class="form-group">
+            <label class="form-label">Logo / Emoji icon</label>
+            <input class="form-input" type="text" name="emoji" value="${esc(client?.emoji||'🏪')}" placeholder="🏪 or /images/logo.png" maxlength="255">
+            <span class="form-hint">Single emoji (e.g. 🍗, ☕, 🍕) or public image path (/images/kfc-logo.png)</span>
+          </div>
+
+          <!-- ── PRIMARY THEME & VISUAL STYLING PERMISSION ── -->
+          <div class="form-group" style="background:var(--s2);border:1px solid var(--b1);border-radius:14px;padding:18px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <label class="form-label" style="margin:0;display:flex;align-items:center;gap:6px;color:var(--t1)">
+                <i class="ti ti-palette" style="color:var(--accent);font-size:17px"></i> Client Primary Theme &amp; Visual Styling
+              </label>
+              <span class="badge badge-purple" style="font-size:11px">Admin Managed</span>
             </div>
-            <div class="form-group">
-              <label class="form-label">Brand colour</label>
-              <div class="color-row">
-                <input class="color-pick" type="color" id="colorPick" value="${esc(client?.primary_color||'#7c4dff')}" oninput="document.getElementById('colorTxt').value=this.value">
-                <input class="form-input" type="text" id="colorTxt" name="primary_color" value="${esc(client?.primary_color||'#7c4dff')}" placeholder="#7c4dff" oninput="document.getElementById('colorPick').value=this.value" style="flex:1">
+
+            <div class="form-2col" style="margin-bottom:14px">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label" style="font-size:10.5px">Primary Theme Mode</label>
+                <select class="form-select" name="primary_theme" id="primaryThemeSelect">
+                  <option value="dark" ${currentTheme === 'dark' ? 'selected' : ''}>🌙 Dark Mode (Sleek Dark Glass &amp; Midnight)</option>
+                  <option value="light" ${currentTheme === 'light' ? 'selected' : ''}>☀️ Light Mode (Clean White &amp; Daylight Glass)</option>
+                  <option value="system" ${currentTheme === 'system' ? 'selected' : ''}>📱 Auto / System (Follows Customer Device Setting)</option>
+                </select>
+                <span class="form-hint">Default theme rendered when visitors open this review page</span>
               </div>
-              <span class="form-hint">Used for buttons and accents on the review page</span>
+
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label" style="font-size:10.5px">Brand Accent Color</label>
+                <div class="color-row">
+                  <input class="color-pick" type="color" id="colorPick" value="${esc(client?.primary_color||'#7c4dff')}" oninput="document.getElementById('colorTxt').value=this.value">
+                  <input class="form-input" type="text" id="colorTxt" name="primary_color" value="${esc(client?.primary_color||'#7c4dff')}" placeholder="#7c4dff" oninput="document.getElementById('colorPick').value=this.value" style="flex:1">
+                </div>
+                <span class="form-hint">Powers primary review buttons, glow orbs, and active tags</span>
+              </div>
+            </div>
+
+            <!-- QUICK PRESET PALETTES -->
+            <div style="margin-bottom:14px">
+              <label class="form-label" style="font-size:10.5px;margin-bottom:6px">Quick Preset Palettes</label>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <button type="button" class="preset-btn" onclick="setPresetColor('#7c4dff')" style="background:rgba(124,77,255,0.15);border:1px solid #7c4dff;color:#c4b5fd;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#7c4dff"></span> Violet Glow</button>
+                <button type="button" class="preset-btn" onclick="setPresetColor('#e4002b')" style="background:rgba(228,0,43,0.15);border:1px solid #e4002b;color:#fca5a5;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#e4002b"></span> Crimson Red</button>
+                <button type="button" class="preset-btn" onclick="setPresetColor('#1d4ed8')" style="background:rgba(29,78,216,0.15);border:1px solid #1d4ed8;color:#93c5fd;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#1d4ed8"></span> Royal Blue</button>
+                <button type="button" class="preset-btn" onclick="setPresetColor('#10b981')" style="background:rgba(16,185,129,0.15);border:1px solid #10b981;color:#6ee7b7;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#10b981"></span> Emerald Green</button>
+                <button type="button" class="preset-btn" onclick="setPresetColor('#ea580c')" style="background:rgba(234,88,12,0.15);border:1px solid #ea580c;color:#fdba74;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#ea580c"></span> Sunset Orange</button>
+                <button type="button" class="preset-btn" onclick="setPresetColor('#ec4899')" style="background:rgba(236,72,153,0.15);border:1px solid #ec4899;color:#fbcfe8;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#ec4899"></span> Rose Pink</button>
+                <button type="button" class="preset-btn" onclick="setPresetColor('#475569')" style="background:rgba(71,85,105,0.2);border:1px solid #475569;color:#cbd5e1;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#475569"></span> Slate Minimal</button>
+              </div>
+            </div>
+
+            <!-- THEME PERMISSION TOGGLE -->
+            <div style="border-top:1px solid var(--b1);padding-top:14px;margin-top:12px;display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font-size:13px;font-weight:600;color:var(--t1);margin-bottom:2px">Allow Customer Theme Toggle</div>
+                <div style="font-size:11.5px;color:var(--t3)">When turned ON, visitors can tap the sun/moon button to switch light/dark. When turned OFF, the toggle is hidden and visitors are locked into the Admin's configured primary theme.</div>
+              </div>
+              <div class="toggle-wrap" style="margin-left:14px;flex-shrink:0">
+                <div class="toggle ${allowToggle ? 'on' : ''}" id="togTheme" onclick="flipThemeToggle()"><div class="toggle-k"></div></div>
+                <input type="hidden" name="allow_theme_toggle" id="themeToggleInp" value="${allowToggle ? 'on' : 'off'}">
+              </div>
             </div>
           </div>
 
@@ -603,6 +666,17 @@ function clientFormPage(client, error) {
     </form>
 
     <script>
+    function setPresetColor(hex) {
+      document.getElementById('colorPick').value = hex;
+      document.getElementById('colorTxt').value = hex;
+    }
+
+    function flipThemeToggle() {
+      const tog = document.getElementById('togTheme');
+      const on = tog.classList.toggle('on');
+      document.getElementById('themeToggleInp').value = on ? 'on' : 'off';
+    }
+
     function flipToggle() {
       const tog = document.getElementById('tog');
       const on = tog.classList.toggle('on');

@@ -40,6 +40,8 @@ db.exec(`
     emoji TEXT DEFAULT '🏪',
     place_id TEXT NOT NULL,
     primary_color TEXT DEFAULT '#7c4dff',
+    primary_theme TEXT DEFAULT 'dark',
+    allow_theme_toggle INTEGER DEFAULT 1,
     tags TEXT DEFAULT '[]',
     active INTEGER DEFAULT 1,
     expires_at DATETIME DEFAULT NULL,
@@ -79,12 +81,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_review_memory_client ON review_memory(client_id);
 `);
 
-// Migration: add expires_at if missing
+// Migrations: add columns if missing
 try {
   db.exec("ALTER TABLE clients ADD COLUMN expires_at DATETIME DEFAULT NULL;");
-} catch (e) {
-  // column already exists
-}
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE clients ADD COLUMN primary_theme TEXT DEFAULT 'dark';");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE clients ADD COLUMN allow_theme_toggle INTEGER DEFAULT 1;");
+} catch (e) {}
 
 // Auto-seed default admin if database is new
 try {
