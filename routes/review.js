@@ -921,7 +921,7 @@ function toggleTag(label) {
     return;
   }
 
-  // 2. Debounce AI call by 200ms to batch rapid multi-tag clicks
+  // 2. Fast 60ms debounce for ultra-responsive tag selection
   clearTimeout(tagDebounceTimer);
   const currentSeq = ++tagReqSeq;
 
@@ -949,7 +949,7 @@ function toggleTag(label) {
     .catch(err => {
       console.warn('AI review generation failed:', err);
     });
-  }, 200);
+  }, 60);
 }
 
 function regenerateReview() {

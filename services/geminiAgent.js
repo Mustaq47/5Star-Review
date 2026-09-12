@@ -475,7 +475,12 @@ Output JSON array with "l" key only.`;
     systemInstruction: TAG_SYSTEM_PROMPT,
   });
 
-  const jsonStr = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+  let jsonStr = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+  const startIdx = jsonStr.indexOf('[');
+  const endIdx = jsonStr.lastIndexOf(']');
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    jsonStr = jsonStr.substring(startIdx, endIdx + 1);
+  }
   try {
     const parsed = JSON.parse(jsonStr);
     if (Array.isArray(parsed) && parsed.length > 0) {

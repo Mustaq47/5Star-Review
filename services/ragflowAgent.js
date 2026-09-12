@@ -851,216 +851,162 @@ function localGetTagsForRating(r, limit = 8) {
 }
 
 
-// ═══════════════════════════════════════════════════════════════
-//  REVIEW GENERATION (Gemini → ReviewWriter Agent → Local)
-// ═══════════════════════════════════════════════════════════════
+function synthesizeFromSelectedTags({ tags = [], rating = 5, bizName = 'this place', client = null }) {
+  const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
+  const tagList = Array.isArray(tags)
+    ? tags.map(t => typeof t === 'object' ? (t.l || t.label || '') : String(t)).filter(Boolean)
+    : [];
 
-const { generateReviewWithAgent } = require('./reviewWriterAgent');
+  const cleanTags = tagList.map(t =>
+    t.replace(/[\u{1F600}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F900}-\u{1F9FF}]/gu, '')
+     .replace(/^[^\w\s]+/, '')
+     .trim()
+  ).filter(Boolean);
+
+  if (cleanTags.length === 0) {
+    if (r === 5) return `Had an amazing visit to ${bizName}! Everything was fresh, delicious, and the service was super quick. Definitely coming back!`;
+    if (r === 4) return `Really pleasant experience at ${bizName}. Good food quality, friendly staff, and reasonable prices overall.`;
+    if (r === 3) return `Decent spot for a quick bite at ${bizName}. Food was okay though service could be a bit faster during rush hours.`;
+    return `Food was okay at ${bizName}, but had to wait longer than expected today. Hoping service speed improves next time.`;
+  }
+
+  // Conversational aspect clauses tailored for natural flow
+  const aspectDescriptions = {
+    chicken: [
+      'the crispy fried chicken was super crunchy and juicy',
+      'the chicken was piping hot with the best crunch',
+      'the fried chicken was fresh, flavorful, and seasoned just right'
+    ],
+    burger: [
+      'the zinger burger had the perfect crunch and soft buns',
+      'the burger was super fresh and full of flavor',
+      'the burgers were delicious and well prepared'
+    ],
+    fries: [
+      'the peri peri fries were hot, crisp, and seasoned so well',
+      'the fries had the perfect seasoning and crunch',
+      'the fries were piping hot and delicious'
+    ],
+    service: [
+      'the service was super quick and staff were really welcoming',
+      'the counter staff were friendly and got our order out fast',
+      'quick and hassle-free service throughout our visit'
+    ],
+    clean: [
+      'the place was spotless and followed great hygiene standards',
+      'super clean and comfortable atmosphere throughout',
+      'clean dining area with a very welcoming vibe'
+    ],
+    ice_cream: [
+      'the ice creams were rich, creamy, and super flavorful',
+      'loved the thick creamy ice creams and desserts',
+      'the ice cream flavors were fresh and delicious'
+    ],
+    shake: [
+      'the milkshakes were thick, chilled, and perfectly blended',
+      'thick shakes had great consistency and rich taste',
+      'the beverages were cold, creamy, and super refreshing'
+    ],
+    pizza: [
+      'the pizza was cheesy, hot, with a perfectly baked crust',
+      'loved the pizza — loaded with toppings and baked fresh',
+      'the pizza crust had great crunch and lots of cheese'
+    ],
+    family: [
+      'great comfortable environment for friends and family',
+      'very welcoming and family-friendly setting',
+      'spacious and relaxed vibe for hanging out'
+    ],
+    value: [
+      'generous portions and very pocket-friendly pricing',
+      'great value for money without compromising on quality',
+      'prices are totally worth the portion sizes and taste'
+    ],
+    taste: [
+      '10/10 taste on everything we ordered today',
+      'food tasted absolutely delicious and fresh',
+      'incredible flavor and quality in every single bite'
+    ]
+  };
+
+  function getClauseForTag(tagStr, idx) {
+    const s = tagStr.toLowerCase();
+    let pool = null;
+    if (s.includes('chicken') || s.includes('wings') || s.includes('strips') || s.includes('bucket')) pool = aspectDescriptions.chicken;
+    else if (s.includes('burger') || s.includes('zinger')) pool = aspectDescriptions.burger;
+    else if (s.includes('fries') || s.includes('peri peri') || s.includes('wedges')) pool = aspectDescriptions.fries;
+    else if (s.includes('service') || s.includes('staff') || s.includes('fast') || s.includes('quick')) pool = aspectDescriptions.service;
+    else if (s.includes('clean') || s.includes('hygien') || s.includes('spotless')) pool = aspectDescriptions.clean;
+    else if (s.includes('ice cream') || s.includes('sundae') || s.includes('dessert') || s.includes('creamy')) pool = aspectDescriptions.ice_cream;
+    else if (s.includes('shake') || s.includes('krusher') || s.includes('beverage') || s.includes('drink')) pool = aspectDescriptions.shake;
+    else if (s.includes('pizza') || s.includes('cheese')) pool = aspectDescriptions.pizza;
+    else if (s.includes('family') || s.includes('kids') || s.includes('group') || s.includes('hangout') || s.includes('ambience')) pool = aspectDescriptions.family;
+    else if (s.includes('value') || s.includes('pocket') || s.includes('price') || s.includes('affordable')) pool = aspectDescriptions.value;
+    else if (s.includes('taste') || s.includes('delicious') || s.includes('recommend') || s.includes('flavour')) pool = aspectDescriptions.taste;
+
+    if (pool && pool.length > 0) {
+      return pool[idx % pool.length];
+    }
+    return `the ${tagStr.toLowerCase()} was top-notch and super fresh`;
+  }
+
+  const clauses = cleanTags.map((t, idx) => getClauseForTag(t, idx));
+
+  if (clauses.length === 1) {
+    if (r === 5) return `Had an awesome visit to ${bizName} today — ${clauses[0]}! Honestly one of my favourite spots, definitely coming back.`;
+    if (r === 4) return `Stopped by ${bizName} and ${clauses[0]}. Solid experience overall and would visit again.`;
+    if (r === 3) return `Decent visit to ${bizName}. ${clauses[0].charAt(0).toUpperCase() + clauses[0].slice(1)}, though there is room for minor improvements.`;
+    return `Visited ${bizName} recently. ${clauses[0].charAt(0).toUpperCase() + clauses[0].slice(1)}, but hoping service gets a bit faster next time.`;
+  }
+
+  if (clauses.length === 2) {
+    if (r === 5) return `Really loved my visit to ${bizName}! ${clauses[0].charAt(0).toUpperCase() + clauses[0].slice(1)}, and ${clauses[1]}. 10/10 experience!`;
+    if (r === 4) return `Good meal at ${bizName}. ${clauses[0].charAt(0).toUpperCase() + clauses[0].slice(1)}, plus ${clauses[1]}. Worth stopping by!`;
+    return `Stopped by ${bizName}. ${clauses[0].charAt(0).toUpperCase() + clauses[0].slice(1)}, and ${clauses[1]}. Decent overall.`;
+  }
+
+  // 3 or more tags
+  const firstPart = clauses.slice(0, 2).join(', and ');
+  const lastPart = clauses[clauses.length - 1];
+  if (r >= 4) {
+    return `Everything was on point at ${bizName} today! ${firstPart.charAt(0).toUpperCase() + firstPart.slice(1)}. Plus, ${lastPart}. Highly recommend!`;
+  }
+  return `Had a quick visit to ${bizName}. ${firstPart.charAt(0).toUpperCase() + firstPart.slice(1)}, plus ${lastPart}.`;
+}
 
 async function generateReview({ slug, rating = 5, tags = [], previousText = '', client = null }) {
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
-  const bizName = client ? client.business_name : 'this wonderful place';
-  const bizType = client ? client.category : 'restaurant and dessert spot';
+  const bizName = client ? client.business_name : 'this place';
+  const bizType = client ? (client.category || client.description) : 'restaurant';
 
-  // ═══ 1. TRY GEMINI FIRST (smartest, truly unique every time) ═══
+  // 1. Instantly prepare local tag-accurate review
+  const instantReview = synthesizeFromSelectedTags({ tags, rating: r, bizName, client });
+
+  // 2. Race with fast AI call (800ms max)
   if (isGeminiAvailable()) {
     try {
       const userText = tags.length > 0 ? tags.join(', ') : (previousText || '');
-      const review = await generateReviewWithGemini({
+      const aiPromise = generateReviewWithGemini({
         rating: r,
         businessName: bizName,
         businessType: bizType,
         userText,
         tags,
       });
-      if (review && review.length > 20) {
-        console.log('[AI Engine] Review generated via Gemini ✓');
-        return review;
+
+      const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 800));
+      const review = await Promise.race([aiPromise, timeoutPromise]);
+      if (review && typeof review === 'string' && review.trim().length > 15 && !review.includes('User wants') && !review.includes('1.')) {
+        console.log('[AI Engine] Fast AI review generated ✓');
+        return review.trim();
       }
     } catch (e) {
-      console.warn('[AI Engine] Gemini review failed, falling back:', e.message);
+      // ignore and return instantReview
     }
   }
 
-  // ═══ 2. TRY REVIEW-WRITER AGENT (RAGFlow → OpenAI → local) ═══
-  try {
-    const userText = tags.length > 0 ? tags.join(', ') : (previousText || 'Great food and service');
-    const agentRes = await generateReviewWithAgent({
-      rating: r,
-      businessName: bizName,
-      businessType: bizType,
-      userText: userText
-    });
-    if (agentRes && agentRes.ok && agentRes.review) {
-      console.log('[AI Engine] Review generated via', agentRes.source, '✓');
-      return agentRes.review;
-    }
-  } catch (err) {
-    console.warn('[AI Engine] review-writer agent fallback to local synthesizer:', err.message);
-  }
-
-  // ═══ 3. LOCAL SYNTHESIZER (last resort) ═══
-  const domain = getBusinessDomain(client);
-
-  const INTROS_5 = [
-    `Had a truly memorable visit to ${bizName} recently!`,
-    `Without a doubt, one of our absolute favourite spots in the area.`,
-    `Stopped by ${bizName} for an evening food and dessert trip, and loved every bit of it.`,
-    `Everything about ${bizName} was on point from start to finish.`,
-    `Such a delightful experience dining here with friends and family!`
-  ];
-
-  const OUTROS_5 = [
-    `Highly recommended to everyone looking for great food, desserts, and good vibes!`,
-    `Will definitely be coming back again and again — easily a 5-star experience!`,
-    `Kudos to the entire team for maintaining top-notch food standards and hospitality.`,
-    `Leaving 5 stars without hesitation. A must-visit spot!`
-  ];
-
-  const INTROS_LOW = [
-    `Visited ${bizName} recently.`,
-    `Had our dinner here earlier this week.`
-  ];
-
-  const OUTROS_LOW = [
-    `Hope the management works on service speed and quality improvements.`,
-    `Has good potential with better kitchen consistency.`
-  ];
-
-  const intro = r >= 4 ? INTROS_5[Math.floor(Math.random() * INTROS_5.length)] : INTROS_LOW[Math.floor(Math.random() * INTROS_LOW.length)];
-  const outro = r >= 4 ? OUTROS_5[Math.floor(Math.random() * OUTROS_5.length)] : OUTROS_LOW[Math.floor(Math.random() * OUTROS_LOW.length)];
-
-  let sentences = [];
-  const tagPool = localGetTagsForRating(r, 12);
-
-const TAG_VARIATION_BANKS = {
-  ice_cream: [
-    'The ice creams are exquisitely creamy, rich, and full of delightful flavours.',
-    'Their ice cream flavours have the perfect velvety texture with generous scoops.',
-    'Tried the artisan ice cream varieties and every single one was pure bliss.',
-    'The ice creams here are smooth, freshly prepared, and genuinely delicious.',
-    'You get generous portions of creamy, indulgent ice cream that hits the spot.',
-    'Hands down some of the most decadent and flavourful ice creams in town.'
-  ],
-  milkshake: [
-    'The thick milkshakes are perfectly blended and an absolute treat.',
-    'Milkshakes had an incredibly rich, velvety consistency and rich flavour.',
-    'Every sip of their thick shake is packed with creamy, chilled perfection.',
-    'Loved the milkshake selection — super thick, creamy, and made with top ingredients.',
-    'The milkshakes are thick, cold, and loaded with authentic flavour.',
-    'Ordered the signature thick shakes and they completely exceeded all expectations.'
-  ],
-  pizza: [
-    'The pizzas are freshly baked with a golden crispy crust and plenty of cheese.',
-    'Freshly baked pizza with generous mozzarella and mouth-watering toppings.',
-    'The pizza crust was crispy on the edges with rich sauce and gooey melted cheese.',
-    'Loved the pizza — piping hot, flavourful, and baked to golden perfection.',
-    'The pizza toppings are fresh and the crust has the ultimate crunch.',
-    'Deliciously cheesy, hot, and satisfying pizzas made fresh to order.'
-  ],
-  chicken: [
-    'The fried chicken is crispy on the outside, tender and juicy inside.',
-    'Crispy chicken seasoned to perfection with an irresistible crunch.',
-    'Chicken was fried fresh, wonderfully juicy, and served piping hot.',
-    'The crispy fried chicken and spicy wings were crunchy, tender, and bursting with flavor.',
-    'Chicken pieces are well-marinated, crispy, and full of authentic spice.',
-    'Tender, juicy, and coated in the crispiest golden batter.'
-  ],
-  service: [
-    'The service is exceptionally prompt, and the staff are warmly welcoming.',
-    'Staff members are attentive, courteous, and provide lightning fast service.',
-    'Impressed by the friendly hospitality and quick turnaround times.',
-    'Service was smooth, professional, and handled with genuine care.',
-    'The team was proactive, polite, and made sure we had everything we needed.',
-    'Quick service and welcoming smiles made the visit extra special.'
-  ],
-  pocket_friendly: [
-    'Generous portions at very reasonable prices — outstanding value.',
-    'Pricing is very reasonable and gives incredible value for every rupee spent.',
-    'Pocket-friendly pricing combined with top-tier food quality is a huge plus.',
-    'Great food at prices that are easy on the pocket without compromising on taste.',
-    'Super affordable menu with large portions that leave you completely satisfied.',
-    'Outstanding value for money — generous servings and very honest pricing.'
-  ],
-  ambience: [
-    'The night fairy lights and vibrant ambience create a wonderful cozy vibe.',
-    'Ambience is warm, lively, and beautifully lit for evening hangouts.',
-    'Loved the aesthetic decor, fairy lights, and relaxing background music.',
-    'The seating area is cozy, modern, and has a great welcoming atmosphere.',
-    'Fairy lights and comfortable seating make this the ultimate evening spot.',
-    'Great vibe, peaceful seating, and beautiful lighting throughout the place.'
-  ],
-  cream_more: [
-    'The Cream More special desserts and sundaes are top-notch and a must-try.',
-    'Cream More desserts are rich, layered with goodness, and wonderfully satisfying.',
-    'Their signature Cream More sundaes are an absolute masterpiece of sweetness.',
-    'Tried the Cream More special sundae and it was decadent from first bite to last.'
-  ],
-  family: [
-    'A wonderful, clean environment for family gatherings and evening hangouts.',
-    'Spacious, hygienic, and very accommodating for families and groups.',
-    'Family-friendly setting with clean tables, great music, and comfortable seating.',
-    'A fantastic spot to bring family and kids for a relaxed and delicious meal.'
-  ],
-  recommend: [
-    'Hands down one of the finest food and dessert spots in town — 10/10 experience!',
-    'Would recommend this wonderful spot to all foodies and dessert lovers without hesitation.',
-    'An absolute 10/10 experience that I will gladly recommend to all my friends.',
-    'Definitely a must-visit spot in the area — top quality in every aspect.'
-  ]
-};
-
-function getSentenceForTag(tagLabel) {
-  const t = (tagLabel || '').toLowerCase();
-  let pool = null;
-  if (t.includes('ice cream') || t.includes('gelato')) pool = TAG_VARIATION_BANKS.ice_cream;
-  else if (t.includes('shake') || t.includes('milk')) pool = TAG_VARIATION_BANKS.milkshake;
-  else if (t.includes('pizza')) pool = TAG_VARIATION_BANKS.pizza;
-  else if (t.includes('chicken') || t.includes('wing')) pool = TAG_VARIATION_BANKS.chicken;
-  else if (t.includes('service') || t.includes('staff') || t.includes('fast')) pool = TAG_VARIATION_BANKS.service;
-  else if (t.includes('pocket') || t.includes('value') || t.includes('price')) pool = TAG_VARIATION_BANKS.pocket_friendly;
-  else if (t.includes('ambien') || t.includes('light') || t.includes('cozy') || t.includes('vibe')) pool = TAG_VARIATION_BANKS.ambience;
-  else if (t.includes('cream more') || t.includes('sundae') || t.includes('dessert')) pool = TAG_VARIATION_BANKS.cream_more;
-  else if (t.includes('family') || t.includes('clean') || t.includes('hygiene')) pool = TAG_VARIATION_BANKS.family;
-  else if (t.includes('recommend') || t.includes('favourite') || t.includes('10/10')) pool = TAG_VARIATION_BANKS.recommend;
-
-  if (pool && pool.length > 0) {
-    return pool[Math.floor(Math.random() * pool.length)];
-  }
-  const cleanTag = tagLabel.replace(/^[^\w\s]+/, '').trim();
-  const genericVariations = [
-    `The ${cleanTag.toLowerCase()} was exceptionally fresh, flavorful, and prepared with great care.`,
-    `Really impressed with the ${cleanTag.toLowerCase()} — outstanding taste and presentation.`,
-    `The ${cleanTag.toLowerCase()} stood out as a highlight of our visit.`,
-    `Enjoyed the quality of the ${cleanTag.toLowerCase()}, completely satisfied with the taste.`
-  ];
-  return genericVariations[Math.floor(Math.random() * genericVariations.length)];
-}
-
-  if (tags.length > 0) {
-    tags.forEach(selectedTag => {
-      sentences.push(getSentenceForTag(selectedTag));
-    });
-  } else {
-    const sampleDish = domain.dishes[Math.floor(Math.random() * domain.dishes.length)];
-    const sampleQuality = domain.qualities[Math.floor(Math.random() * domain.qualities.length)];
-    sentences.push(`The ${sampleDish.toLowerCase()} was ${sampleQuality} and exceeded expectations.`);
-    sentences.push(`The staff were courteous and the ambience made for a very relaxing visit.`);
-  }
-
-  const uniqueSentences = Array.from(new Set(sentences));
-  const connectors = [' ', ' Moreover, ', ' Plus, ', ' In addition, ', ' Also, '];
-
-  let body = '';
-  uniqueSentences.forEach((s, idx) => {
-    if (idx === 0) body += s;
-    else {
-      const conn = connectors[Math.floor(Math.random() * connectors.length)];
-      body += conn + s;
-    }
-  });
-
-  return `${intro} ${body} ${outro}`.replace(/\s+/g, ' ').trim();
+  console.log('[AI Engine] Instant tag synthesis returned (<5ms) ✓');
+  return instantReview;
 }
 
 
