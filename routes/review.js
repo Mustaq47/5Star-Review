@@ -304,88 +304,70 @@ ${isCoolSpicy ? `
 .root.light .sl{color:rgba(2,132,199,0.8)}
 .root.dark  .sl{color:rgba(56,189,248,0.75)}
 
-/* ── QUICK TAGS (APPLE DESIGN & MINIMALIST UI) ── */
+/* ── QUICK TAGS (OPTIMAL COMPACT SIZE & ZERO LAYOUT SHIFT) ── */
 .tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 22px;
-  min-height: 44px;
+  gap: 6px;
+  margin-bottom: 16px;
+  min-height: 38px;
 }
 .tag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 8px 14px;
-  border-radius: 9999px;
-  font-size: 12.5px;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
   font-weight: 500;
+  line-height: 1.35;
   letter-spacing: -0.01em;
   cursor: pointer;
   border: 1px solid;
   user-select: none;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
 }
 .tag:active {
-  transform: scale(0.95) !important;
+  transform: scale(0.96);
 }
 
 /* Light Theme */
 .root.light .tag {
-  background: rgba(255, 255, 255, 0.85);
-  border-color: rgba(186, 230, 253, 0.95);
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(186, 230, 253, 0.85);
   color: #0369a1;
 }
 .root.light .tag:hover {
   background: #ffffff;
   border-color: #38bdf8;
   color: #0284c7;
-  transform: translateY(-1.5px);
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.12);
 }
 .root.light .tag.on {
-  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  background: #0284c7;
   border-color: #0284c7;
   color: #ffffff;
-  font-weight: 600;
-  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.3), inset 0 1px 0 rgba(255,255,255,0.25);
-  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.28);
 }
 
 /* Dark Theme */
 .root.dark .tag {
   background: rgba(15, 23, 42, 0.65);
   border-color: rgba(56, 189, 248, 0.16);
-  color: #e0f2fe;
+  color: #bae6fd;
 }
 .root.dark .tag:hover {
   background: rgba(14, 165, 233, 0.15);
   border-color: rgba(56, 189, 248, 0.35);
   color: #ffffff;
-  transform: translateY(-1.5px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
 .root.dark .tag.on {
   background: #38bdf8;
   border-color: #38bdf8;
   color: #082f49;
-  font-weight: 600;
-  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.35), inset 0 1px 0 rgba(255,255,255,0.4);
-  transform: translateY(-1px);
-}
-
-.tag-chk {
-  font-size: 13px;
-  margin-left: 2px;
-  stroke-width: 2.5;
-  animation: tagPop 0.18s cubic-bezier(0.34, 1.5, 0.64, 1) both;
-}
-@keyframes tagPop {
-  0% { transform: scale(0.5); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.3);
 }
 
 /* ── ACTIONS ── */
@@ -631,7 +613,7 @@ function renderTags() {
     const b = document.createElement('button');
     const isSelected = activeTags.has(t.l);
     b.className = 'tag' + (isSelected ? ' on' : '');
-    b.innerHTML = '<span>' + esc(t.l) + '</span>' + (isSelected ? '<i class="ti ti-check tag-chk"></i>' : '');
+    b.textContent = t.l;
     b.onclick = () => toggleTag(t.l);
     el.appendChild(b);
   });
