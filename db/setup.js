@@ -101,6 +101,24 @@ try {
         "Nellore's favourite spot for ice creams, thick milkshakes, pizzas and crispy fried chicken. Stunning fairy-light ambience on Bombay Road, Buchireddypalem.",
         '/images/cool-and-spicy-logo-emblem.png','ChIJDdS5HHKTTDoRupO5zg6UVNg','#ff1e27',tags);
   }
+
+  const kfc = db.prepare("SELECT * FROM clients WHERE slug = 'kfc'").get();
+  if (!kfc) {
+    const kfcTags = JSON.stringify([
+      { l: '🍗 Crispy Fried Chicken', t: 'The Hot & Crispy fried chicken was super crunchy on the outside, juicy inside, and served fresh.' },
+      { l: '🍔 Zinger Burger', t: 'The Zinger burger had the perfect spicy crunch, fresh lettuce, and soft toasted buns.' },
+      { l: '🍟 Peri Peri Fries', t: 'The fries were piping hot, crisp, and dusted with flavorful peri peri seasoning.' },
+      { l: '🥤 Chilled Krushers', t: 'The beverages were refreshing, perfectly chilled, and complemented the meal wonderfully.' },
+      { l: '⚡ Fast service', t: 'Order was prepared quickly, and the counter staff were courteous and efficient.' },
+      { l: '✨ Clean & hygienic', t: 'The dining area and counters were spotless, following excellent hygiene standards.' },
+      { l: '👨‍👩‍👧 Family friendly', t: 'A comfortable, spacious environment for a quick bite with friends and family.' },
+      { l: '💖 10/10 Taste', t: 'Consistent 5-star quality and delicious flavors as always — highly recommended!' }
+    ]);
+    db.prepare('INSERT INTO clients (slug,business_name,category,description,emoji,place_id,primary_color,tags) VALUES (?,?,?,?,?,?,?,?)')
+      .run('kfc', 'KFC', 'Fried Chicken · Burgers · Fast Food · Beverages',
+        'World-famous crispy fried chicken, iconic zinger burgers, and flavorful sides.',
+        '🍗', 'https://maps.app.goo.gl/KGXjtNPGDHcjchGn7', '#e4002b', kfcTags);
+  }
 } catch (e) {
   console.error('Auto-seed error:', e);
 }

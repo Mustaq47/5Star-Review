@@ -915,7 +915,9 @@ function fallbackCopy(text) {
 }
 
 function copyOpen() {
-  const url = 'https://search.google.com/local/writereview?placeid=' + encodeURIComponent(PLACE_ID);
+  const url = (PLACE_ID.startsWith('http://') || PLACE_ID.startsWith('https://'))
+    ? PLACE_ID
+    : ('https://search.google.com/local/writereview?placeid=' + encodeURIComponent(PLACE_ID));
   trackClick();
   const text = getText();
   
