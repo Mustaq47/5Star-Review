@@ -396,17 +396,24 @@ ${isCoolSpicy ? `
 .btn i{font-size:17px}
 
 .bp{
-  background:linear-gradient(135deg,#38bdf8 0%,#0ea5e9 25%,#f43f5e 70%,#ef4444 100%);
-  background-size:260% 260%;
-  border-color:rgba(255,255,255,0.25);
-  color:#fff;
-  animation:btnColorShift 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
-  position:relative;overflow:hidden;
+  --c-start: hsl(199, 92%, 58%);
+  --c-end: hsl(205, 90%, 46%);
+  --c-shadow: hsla(199, 90%, 50%, 0.35);
+  background: linear-gradient(135deg, var(--c-start) 0%, var(--c-end) 100%);
+  border-color: rgba(255,255,255,0.25);
+  color: #fff;
+  box-shadow: 0 4px 22px var(--c-shadow), inset 0 1px 0 rgba(255,255,255,0.3);
+  position: relative;
+  overflow: hidden;
+  transition: background 0.45s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.45s ease, transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1);
 }
-@keyframes btnColorShift{
-  0%{background-position:0% 50%;box-shadow:0 4px 22px rgba(56,189,248,0.38),inset 0 1px 0 rgba(255,255,255,0.3)}
-  50%{box-shadow:0 4px 22px rgba(168,85,247,0.35),inset 0 1px 0 rgba(255,255,255,0.3)}
-  100%{background-position:100% 50%;box-shadow:0 4px 24px rgba(239,68,68,0.4),inset 0 1px 0 rgba(255,255,255,0.3)}
+.bp.complete{
+  animation:btnCompletePulse 0.4s cubic-bezier(0.34, 1.5, 0.64, 1) both;
+}
+@keyframes btnCompletePulse{
+  0%{transform:scale(0.97)}
+  50%{transform:scale(1.03)}
+  100%{transform:scale(1)}
 }
 .root.dark .bp{opacity:0.95}
 .bp:hover{filter:brightness(1.08);transform:translateY(-1.5px)}
@@ -532,7 +539,7 @@ ${isCoolSpicy ? `
         <div class="tags" id="tags"></div>
 
         <div class="acts">
-          <button class="btn bp" onclick="go(2)">
+          <button class="btn bp" id="btnPreview" onclick="go(2)">
             Preview review <i class="ti ti-arrow-right"></i>
           </button>
           <button class="btn bg" onclick="go(0)">
@@ -600,6 +607,7 @@ function go(n) {
   }
   if (n===1) {
     renderTags();
+    updateButtonProgression();
   }
   if (n===2) buildPreview();
 }
@@ -665,6 +673,44 @@ function renderTags() {
   });
 }
 
+function updateButtonProgression() {
+  const ta = document.getElementById('ta');
+  const btn = document.getElementById('btnPreview') || document.querySelector('#p1 .bp');
+  if (!btn) return;
+
+  const textLen = (ta && ta.value) ? ta.value.trim().length : 0;
+  const tagCount = activeTags.size;
+
+  // Calculate progression ratio (0.0 to 1.0)
+  let ratio = 0;
+  if (textLen > 0) {
+    ratio = Math.min(1, Math.max(textLen / 45, tagCount > 0 ? 0.7 : 0.25));
+  } else if (tagCount > 0) {
+    ratio = Math.min(1, tagCount * 0.5);
+  }
+
+  // Smooth HSL path: 199 (Light Blue) -> 252 (Indigo) -> 305 (Pink) -> 358 (Red)
+  const hue = (199 + ratio * 159) % 360;
+  const sat = 90 + Math.round(ratio * 6);
+  const lightStart = 58 - Math.round(ratio * 2);
+  const lightEnd = 46 - Math.round(ratio * 2);
+
+  const colStart = `hsl(${hue.toFixed(1)}, ${sat}%, ${lightStart}%)`;
+  const colEnd = `hsl(${((hue + 8) % 360).toFixed(1)}, ${sat}%, ${lightEnd}%)`;
+  const shadowCol = `hsla(${hue.toFixed(1)}, 90%, 50%, ${(0.32 + ratio * 0.12).toFixed(2)})`;
+
+  btn.style.setProperty('--c-start', colStart);
+  btn.style.setProperty('--c-end', colEnd);
+  btn.style.setProperty('--c-shadow', shadowCol);
+
+  const isComplete = ratio >= 0.95;
+  if (isComplete && !btn.classList.contains('complete')) {
+    btn.classList.add('complete');
+  } else if (!isComplete) {
+    btn.classList.remove('complete');
+  }
+}
+
 function toggleTag(label) {
   if (activeTags.has(label)) {
     activeTags.delete(label);
@@ -672,6 +718,7 @@ function toggleTag(label) {
     activeTags.add(label);
   }
   renderTags();
+  updateButtonProgression();
 
   if (activeTags.size === 0) {
     clearTimeout(genTimer);
@@ -682,6 +729,7 @@ function toggleTag(label) {
     }
     clrS();
     updateMirror();
+    updateButtonProgression();
     return;
   }
 
@@ -699,6 +747,7 @@ function triggerAgentGeneration() {
     ta.placeholder = 'Tap quick tags below or type your experience...';
     clrS();
     updateMirror();
+    updateButtonProgression();
     return;
   }
 
@@ -720,6 +769,7 @@ function triggerAgentGeneration() {
         ta.value = data.review;
         clrS();
         updateMirror();
+        updateButtonProgression();
         toast('✨ Generated unique review');
       }
     })
@@ -759,6 +809,7 @@ function onTA() {
   const ta = document.getElementById('ta');
   const v = ta.value;
   syncScroll();
+  updateButtonProgression();
   if (!v || v.trim().length === 0) {
     clrS();
     return;
@@ -792,6 +843,7 @@ function acceptSuggestion() {
     ta.value += (needsSpace ? ' ' : '') + cleanAdd + ' ';
     clrS();
     syncScroll();
+    updateButtonProgression();
     ta.focus();
   }
 }
