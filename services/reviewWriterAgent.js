@@ -80,25 +80,32 @@ function localGenerate(opts) {
 // Chat completions caller for NVIDIA NIM / OpenAI-compatible APIs.
 async function callChat(apiBase, apiKey, model, messages) {
   const url = apiBase.replace(/\/$/, '') + '/chat/completions';
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey,
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify({ model, messages, temperature: 0.8, max_tokens: 90 })
-  });
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => '');
-    throw new Error('LLM API ' + resp.status + ': ' + errText.slice(0, 200));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 300 })
+    });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      throw new Error('LLM API ' + resp.status + ': ' + errText.slice(0, 200));
+    }
+    const data = await resp.json();
+    const choice = data.choices?.[0]?.message;
+    let content = choice?.content || '';
+    if (!content && choice?.reasoning_content) content = choice.reasoning_content;
+    content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    return String(content).trim();
+  } finally {
+    clearTimeout(timer);
   }
-  const data = await resp.json();
-  const choice = data.choices?.[0]?.message;
-  let content = choice?.content || '';
-  if (!content && choice?.reasoning_content) content = choice.reasoning_content;
-  content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  return String(content).trim();
 }
 
 function buildMessages(inputs) {

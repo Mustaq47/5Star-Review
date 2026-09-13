@@ -13,20 +13,25 @@
 
 const db = require('../db/setup');
 const path = require('path');
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'gemini-embedding-001';
 const GEMINI_BASE = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
 
 function getGeminiApiKeys() {
   const keys = [];
-  if (process.env.GEMINI_API_KEY) {
-    keys.push(...process.env.GEMINI_API_KEY.split(',').map(k => k.trim()).filter(Boolean));
-  }
-  if (process.env.GEMINI_API_KEY_2) {
-    keys.push(...process.env.GEMINI_API_KEY_2.split(',').map(k => k.trim()).filter(Boolean));
-  }
-  if (process.env.GEMINI_API_KEYS) {
-    keys.push(...process.env.GEMINI_API_KEYS.split(',').map(k => k.trim()).filter(Boolean));
+  const candidates = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI2_API_KEY,
+    process.env.GEMINI_API_KEY2,
+    process.env.GEMINI_KEYS,
+    process.env.GEMINI_API_KEYS
+  ];
+
+  for (const raw of candidates) {
+    if (raw) {
+      keys.push(...raw.split(',').map(k => k.trim()).filter(Boolean));
+    }
   }
   return Array.from(new Set(keys));
 }
@@ -131,12 +136,8 @@ function buildSuggestionPrompt({ text, rating = 5, businessName = '', businessTy
 }
 
 async function suggestWithGemini({ text, rating = 5, businessName = '', businessType = '', tagLabels = [] }) {
-  const geminiKeys = getGeminiApiKeys();
-  if (!geminiKeys.length) {
-    throw new Error('No GEMINI_API_KEY configured');
-  }
-
   const prompt = buildSuggestionPrompt({ text, rating, businessName, businessType, tagLabels });
+  const geminiKeys = getGeminiApiKeys();
 
   let lastErr = null;
   for (const key of geminiKeys) {
@@ -161,7 +162,7 @@ async function suggestWithGemini({ text, rating = 5, businessName = '', business
             }
           }
         })
-      }, 6000);
+      }, 7000);
 
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
@@ -197,7 +198,52 @@ async function suggestWithGemini({ text, rating = 5, businessName = '', business
     }
   }
 
-  throw lastErr || new Error('All Gemini API keys exhausted');
+  // Fallback to NVIDIA NIM if Gemini keys are exhausted/unavailable
+  const nvidiaKey = process.env.NVIDIA_API_KEY;
+  if (nvidiaKey) {
+    try {
+      const nvidiaBase = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
+      const nvidiaModel = process.env.NVIDIA_MODEL || 'deepseek-ai/deepseek-v4-flash-0731';
+      const resp = await fetchWithTimeout(nvidiaBase.replace(/\/$/, '') + '/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + nvidiaKey,
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          model: nvidiaModel,
+          messages: [
+            { role: 'system', content: 'You are a JSON assistant. Output valid JSON in format {"primary":"...","alternatives":["..."]}. No markdown.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.6,
+          max_tokens: 300
+        })
+      }, 10000);
+      if (resp.ok) {
+        const data = await resp.json();
+        let raw = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.message?.reasoning_content || '';
+        raw = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        const start = raw.indexOf('{');
+        const end = raw.lastIndexOf('}');
+        if (start !== -1 && end !== -1 && end > start) {
+          const parsed = JSON.parse(raw.slice(start, end + 1));
+          if (parsed.primary) {
+            return {
+              source: 'nvidia',
+              primary: String(parsed.primary).trim(),
+              alternatives: Array.isArray(parsed.alternatives) ? parsed.alternatives.map(a => String(a).trim()).filter(Boolean).slice(0, 4) : []
+            };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[suggestWithGemini] NVIDIA fallback error:', e.message);
+    }
+  }
+
+  throw lastErr || new Error('All Gemini API keys and AI fallbacks exhausted');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -221,7 +267,7 @@ async function callGemini(prompt, { temperature = 0.95, maxTokens = 120, systemI
       };
       if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
 
-      const resp = await fetchWithTimeout(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 3500);
+      const resp = await fetchWithTimeout(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 6000);
       if (resp.ok) {
         const data = await resp.json();
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -253,9 +299,9 @@ async function callGemini(prompt, { temperature = 0.95, maxTokens = 120, systemI
           model: nvidiaModel,
           messages,
           temperature,
-          max_tokens: maxTokens
+          max_tokens: Math.max(250, maxTokens)
         })
-      }, 8000);
+      }, 12000);
       if (resp.ok) {
         const data = await resp.json();
         const choice = data.choices?.[0]?.message;
@@ -561,53 +607,47 @@ Output JSON array with "l" key only.`;
   return null;
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  3. NEXT-WORD PREDICTION (ADAPTIVE + CONTEXT-AWARE)
-// ═══════════════════════════════════════════════════════════════
-
-const PREDICT_SYSTEM_PROMPT = `You are an autocomplete engine for Google reviews.
-
-Output: JSON with "primary" (best 5-15 word continuation) and "alternatives" (2-3 options).
+const PREDICT_SYSTEM_PROMPT = `You are a real-time next-word autocomplete engine for customer reviews.
+Given the customer review written so far, predict the single NEXT WORD (or short 1-2 word completion) that naturally follows.
 
 Rules:
-- Continuations flow naturally from the text.
-- Positive, review-appropriate tone.
-- No leading space. No emojis. Valid JSON only.`;
+- Complete current partial word or predict the immediate next 1-2 words only (e.g. "delicious", "super crispy", "friendly", "fast", "clean and cozy").
+- Strictly ban whole long sentences or paragraphs. Max 1-3 words in primary.
+- Output valid JSON only:
+{"primary": "<next 1-2 words>", "alternatives": ["<alt 1>", "<alt 2>"]}`;
 
 async function predictWithGemini({ text, rating = 5, businessType, clientId } = {}) {
-  if (!text || text.trim().length < 2) return null;
+  if (!text || text.trim().length < 1) return null;
 
   const r = Math.max(1, Math.min(5, parseInt(rating) || 5));
-  const slug = clientId ? `client_${clientId}` : 'default';
-
-  const style = getUserStyle(slug);
-  let styleContext = '';
-  if (style.completionsCount > 5) {
-    const topStarts = Object.entries(style.commonStarts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([w]) => w);
-    if (topStarts.length > 0) {
-      styleContext = `\n\nUser typically starts with: "${topStarts.join('", "')}"`;
-    }
-  }
-
-  const prompt = `Autocomplete this ${r}-star review for a ${businessType || 'business'}:\n\n"${text.trim()}"${styleContext}\n\nPredict next phrase. Output JSON with "primary" and "alternatives".`;
+  const prompt = `Autocomplete this ${r}-star review for a ${businessType || 'business'}:\n"${text.trim()}"\nPredict the single next word or 1-2 word completion only in JSON: {"primary": "...", "alternatives": [...]}`;
 
   const raw = await callGemini(prompt, {
-    temperature: 0.8,
-    maxTokens: 150,
+    temperature: 0.6,
+    maxTokens: 45,
     systemInstruction: PREDICT_SYSTEM_PROMPT,
   });
 
-  const jsonStr = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+  const startIdx = raw.indexOf('{');
+  const endIdx = raw.lastIndexOf('}');
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) return null;
+
   try {
+    const jsonStr = raw.substring(startIdx, endIdx + 1);
     const result = JSON.parse(jsonStr);
-    if (result.primary) {
+    if (result.primary && typeof result.primary === 'string') {
+      let cleanPrim = result.primary.trim().replace(/^["']|["']$/g, '');
+      // Ensure it is concise next-word completion (max 4 words)
+      const words = cleanPrim.split(/\s+/);
+      if (words.length > 4) cleanPrim = words.slice(0, 3).join(' ');
       return {
-        primary: result.primary,
-        alternatives: Array.isArray(result.alternatives) ? result.alternatives : [],
+        source: 'brain',
+        primary: cleanPrim,
+        alternatives: Array.isArray(result.alternatives) ? result.alternatives.slice(0, 3) : [],
       };
     }
   } catch (e) {
-    console.warn('[geminiAgent] Predict parse failed:', raw.slice(0, 100));
+    console.warn('[geminiAgent] Predict parse failed:', raw.slice(0, 80));
   }
   return null;
 }

@@ -946,20 +946,8 @@ function toggleTag(label) {
   }
 
   const selectedList = Array.from(activeTags);
-  const cacheKey = selectedList.slice().sort().join('|') + '::' + rating;
 
-  // 1. Check local session cache for instant 0-token, 0ms hit
-  if (tagComboCache.has(cacheKey)) {
-    if (ta) {
-      ta.value = tagComboCache.get(cacheKey);
-      updateMirror();
-      syncScroll();
-      updateButtonProgression();
-    }
-    return;
-  }
-
-  // 2. Fast 60ms debounce for ultra-responsive tag selection
+  // Fast 50ms debounce for ultra-responsive tag selection and multi-tag mixing
   clearTimeout(tagDebounceTimer);
   const currentSeq = ++tagReqSeq;
 
@@ -977,7 +965,6 @@ function toggleTag(label) {
     .then(data => {
       if (currentSeq !== tagReqSeq) return; // ignore stale response
       if (data.ok && data.review && ta) {
-        tagComboCache.set(cacheKey, data.review);
         ta.value = data.review;
         updateMirror();
         syncScroll();
@@ -987,7 +974,7 @@ function toggleTag(label) {
     .catch(err => {
       console.warn('AI review generation failed:', err);
     });
-  }, 60);
+  }, 50);
 }
 
 function regenerateReview() {
