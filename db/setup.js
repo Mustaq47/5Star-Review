@@ -122,14 +122,14 @@ try {
   const coolSpicy = db.prepare("SELECT * FROM clients WHERE slug = 'cool-and-spicy'").get();
   if (!coolSpicy) {
     const tags = JSON.stringify([
-      { l: '🍦 Best ice creams', t: 'The ice creams here are absolutely amazing — so many incredible flavours!' },
-      { l: '🥤 Amazing milkshakes', t: 'The milkshakes are thick, creamy and totally worth every rupee.' },
-      { l: '🍕 Delicious pizza', t: 'Pizza was fresh, cheesy and perfectly baked — loved every single bite.' },
-      { l: '🍗 Crispy fried chicken', t: 'The fried chicken is super crispy outside and juicy inside — a must-try!' },
-      { l: '⚡ Fast service', t: 'Service was quick and the staff were very friendly and welcoming.' },
-      { l: '💰 Pocket-friendly', t: 'Great food at very affordable prices — outstanding value for money.' },
-      { l: '🌟 Amazing ambience', t: 'The fairy light ambience is stunning — perfect for hangouts with family and friends.' },
-      { l: '👍 Highly recommend', t: 'Highly recommend Cool & Spicy to anyone looking for a fun and delicious experience!' },
+      { l: '🍦 Best ice creams', t: 'The ice creams here are absolutely amazing — so many incredible flavours! | Incredible range of rich ice cream varieties made with top quality ingredients. | Ice creams were velvety smooth and packed with authentic flavors. | Loved the ice cream sundaes — absolute perfection in every spoonful. | The texture and creaminess of their ice creams are unmatched in town.' },
+      { l: '🥤 Amazing milkshakes', t: 'The milkshakes are thick, creamy and totally worth every rupee. | Shakes were thick, chilled, and rich with authentic flavors. | Loved the thick shake blends — so filling and delightful. | One of the best thick shake spots with great topping combinations. | The chocolate and fruit shakes had amazing thickness and taste.' },
+      { l: '🍕 Delicious pizza', t: 'Pizza was fresh, cheesy and perfectly baked — loved every single bite. | The crust was wonderfully crispy and loaded with delicious toppings. | Delicious melted mozzarella and rich savory pizza sauce. | Hot out of the oven pizza that exceeded all expectations. | The pizza sauce had great depth of flavor with aromatic herbs.' },
+      { l: '🍗 Crispy fried chicken', t: 'The fried chicken is super crispy outside and juicy inside — a must-try! | Fried chicken had amazing crunch and bold seasoning. | Piping hot fried chicken that is full of rich flavor. | Crispy chicken pieces cooked to golden perfection. | Loved the fried chicken tenders and crunchy bites.' },
+      { l: '⚡ Fast service', t: 'Service was quick and the staff were very friendly and welcoming. | Counter service was exceptionally prompt and polite. | Fast turnaround and great hospitality throughout our visit. | Staff greeted us warmly and brought our order swiftly. | Extremely prompt and attentive service.' },
+      { l: '💰 Pocket-friendly', t: 'Great food at very affordable prices — outstanding value for money. | Generous portion sizes with pocket-friendly pricing. | Fantastic value considering the premium taste and quality. | Affordable menu combos that are great for students and families. | Very reasonable rates for high quality food and desserts.' },
+      { l: '🌟 Amazing ambience', t: 'The fairy light ambience is stunning — perfect for hangouts with family and friends. | Beautiful outdoor lighting and cozy seating arrangement. | Magical night vibe with fairy lights and great music. | Wonderful atmosphere for evening coffee, desserts, and talks. | Picturesque ambience that makes dining here special.' },
+      { l: '👍 Highly recommend', t: 'Highly recommend Cool & Spicy to anyone looking for a fun and delicious experience! | Hands down one of the finest food and dessert spots in town — 10/10 experience! | An absolute gem for snacks, pizzas, and desserts. | Loved every single thing we ordered — will definitely be back! | 5-star experience from start to finish.' },
     ]);
     db.prepare('INSERT INTO clients (slug,business_name,category,description,emoji,place_id,primary_color,tags) VALUES (?,?,?,?,?,?,?,?)')
       .run('cool-and-spicy','Cool & Spicy','Ice Creams · Milk Shakes · Pizza\'s · Fried Chicken',

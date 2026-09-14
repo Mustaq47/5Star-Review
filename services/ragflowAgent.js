@@ -919,168 +919,474 @@ function localGetTagsForRating(r, limit = 8, client = null) {
   if (isKfcOrBurger) {
     if (r === 5) {
       return [
-        { l: '🍗 Crispy Fried Chicken', t: 'The Hot & Crispy fried chicken was super crunchy on the outside, juicy inside, and served fresh.' },
-        { l: '🍔 Zinger Burger', t: 'The Zinger burger had the perfect spicy crunch, fresh lettuce, and soft toasted buns.' },
-        { l: '🍟 Peri Peri Fries', t: 'The fries were piping hot, crisp, and dusted with flavorful peri peri seasoning.' },
-        { l: '🍗 Hot Wings & Strips', t: 'Hot wings and chicken tenders were golden, crisp, and succulent.' },
-        { l: '🥤 Chilled Krushers', t: 'The beverages and thick shakes were refreshing, perfectly chilled, and delicious.' },
-        { l: '⚡ Lightning Fast Service', t: 'Counter service was exceptionally prompt and the staff were warmly welcoming.' },
-        { l: '✨ Clean & Hygienic', t: 'The dining area and counters were spotless, following excellent hygiene standards.' },
-        { l: '👨‍👩‍👧 Family Friendly', t: 'A comfortable, spacious environment for a quick bite with friends and family.' },
-        { l: '💖 10/10 Taste', t: 'Consistent 5-star quality and delicious flavors as always — highly recommended!' }
+        {
+          l: '🍗 Crispy Fried Chicken',
+          t: 'The Hot & Crispy fried chicken was super crunchy on the outside, juicy inside, and served fresh. | The fried chicken was piping hot with the absolute best crunch and seasoning. | The chicken tenders and wings were golden, crisp, and succulent. | Loved the crispy chicken — tender, juicy, and packed with authentic spices. | The fried chicken bucket was freshly fried with unbeatable crunch in every bite. | Each piece of chicken was hot, tender, and seasoned generously.'
+        },
+        {
+          l: '🍔 Zinger Burger',
+          t: 'The Zinger burger had the perfect spicy crunch, fresh lettuce, and soft toasted buns. | The burger was super fresh, delightfully juicy, and packed with flavor. | The spicy chicken burger hit the spot with its bold taste and crunchy bite. | Loved the burger patty — thick, crispy on the outside, and very juicy. | The zinger burger was loaded with flavor and had a fantastic crunch. | Buns were soft and toasted with the best crunchy patty.'
+        },
+        {
+          l: '🍟 Peri Peri Fries',
+          t: 'The fries were piping hot, crisp, and dusted with flavorful peri peri seasoning. | The French fries had the perfect golden crispiness and generous seasoning. | The peri peri fries were spicy, tangy, and super addictive. | Loved the crunchy texture and bold peri peri flavor on the fries. | The fries arrived fresh from the fryer with a satisfying crunch. | French fries were crispy, hot, and seasoned just right.'
+        },
+        {
+          l: '🍗 Hot Wings & Strips',
+          t: 'Hot wings and chicken tenders were golden, crisp, and succulent. | The spicy hot wings had an amazing kick and crunchy coating. | Boneless strips were tender, moist, and delightfully crispy. | The hot wings were served piping hot and seasoned to perfection. | Loved the spicy glaze and crunch on the chicken tenders.'
+        },
+        {
+          l: '🥤 Chilled Krushers',
+          t: 'The beverages and thick shakes were refreshing, perfectly chilled, and delicious. | The thick shakes had fantastic consistency and rich creamy taste. | Loved the chilled drinks and Krushers — served at the perfect temperature. | The thick milkshakes were velvety smooth and loaded with authentic flavor. | Cold drinks were a great thirst-quencher with the spicy chicken.'
+        },
+        {
+          l: '⚡ Lightning Fast Service',
+          t: 'Counter service was exceptionally prompt and the staff were warmly welcoming. | Order was prepared in record time with great efficiency. | Quick, smooth, and hassle-free service from the moment we walked in. | Staff was friendly, helpful with recommendations, and served with a smile. | The service was lightning fast even during peak rush hours.'
+        },
+        {
+          l: '✨ Clean & Hygienic',
+          t: 'The dining area and counters were spotless, following excellent hygiene standards. | Super clean tables, sanitized dining space, and pristine surroundings. | The entire space was remarkably neat, well-maintained, and hygienic. | Impressed by how clean and well-kept the dining hall and counters were. | Spotless presentation, clean trays, and very pleasant atmosphere.'
+        },
+        {
+          l: '👨‍👩‍👧 Family Friendly',
+          t: 'A comfortable, spacious environment for a quick bite with friends and family. | Very welcoming and family-friendly setting with comfortable seating. | Spacious and relaxed vibe, making it perfect for group hangouts. | Cozy and inviting ambience with pleasant lighting and good music. | The atmosphere is lively, upbeat, and wonderful for an evening meal.'
+        },
+        {
+          l: '💖 10/10 Taste',
+          t: 'Consistent 5-star quality and delicious flavors as always — highly recommended! | Food tasted absolutely delicious, fresh, and bursting with flavor. | Incredible flavor profile and premium quality in every single bite. | Everything we ordered was cooked to perfection and tasted fantastic. | Truly delicious flavors that make you want to visit again.'
+        }
       ].slice(0, limit);
     }
     if (r === 4) {
       return [
-        { l: '🍗 Tasty Fried Chicken', t: 'The fried chicken was tasty, seasoned well, and served hot.' },
-        { l: '🍔 Good Zinger Burger', t: 'The Zinger burger had good flavor and fresh crunchy lettuce.' },
-        { l: '🍟 Crispy French Fries', t: 'Fries were hot, nicely salted, and crisp.' },
-        { l: '🥤 Refreshing Krushers', t: 'Drinks and Krushers were chilled and paired well with the meal.' },
-        { l: '⚡ Friendly Staff', t: 'Staff were polite, helpful, and took our orders quickly.' },
-        { l: '💰 Fair Value', t: 'Good portions and reasonable combo meal pricing.' },
-        { l: '🌟 Pleasant Ambience', t: 'Comfortable seating and pleasant atmosphere for a casual meal.' },
-        { l: '👍 Solid Overall Experience', t: 'Overall a very solid and enjoyable fast-food visit.' }
+        {
+          l: '🍗 Tasty Fried Chicken',
+          t: 'The fried chicken was tasty, seasoned well, and served hot. | Good crunch on the chicken pieces with decent juiciness. | Chicken was prepared well and had good flavor throughout. | Satisfied with the fried chicken quality and crispiness. | Enjoyed the fried chicken meal, cooked nicely.'
+        },
+        {
+          l: '🍔 Good Zinger Burger',
+          t: 'The Zinger burger had good flavor and fresh crunchy lettuce. | Burger patty was crispy and buns were fresh. | A satisfying burger that hit the spot for a quick lunch. | Good portion size on the burger with tasty mayo sauce. | Decent chicken burger with nice seasoning.'
+        },
+        {
+          l: '🍟 Crispy French Fries',
+          t: 'Fries were hot, nicely salted, and crisp. | French fries had good crunch and were served warm. | Enjoyed the seasoned fries alongside our meal. | Good crispy texture on the fries without too much oil. | Satisfying fries with good portion size.'
+        },
+        {
+          l: '🥤 Refreshing Krushers',
+          t: 'Drinks and Krushers were chilled and paired well with the meal. | Refreshing cold beverages served at the right temperature. | Good flavor and texture on the cold shakes. | Shakes were tasty and reasonably thick. | Nice refreshing drink options available.'
+        },
+        {
+          l: '⚡ Friendly Staff',
+          t: 'Staff were polite, helpful, and took our orders quickly. | Pleasant customer service and prompt order handling. | Courteous counter staff who answered questions nicely. | Friendly team and smooth ordering experience. | Staff were attentive and handed over our food promptly.'
+        },
+        {
+          l: '💰 Fair Value',
+          t: 'Good portions and reasonable combo meal pricing. | Value for money fast food combos that fill you up. | Decent pricing for the food quality offered. | Good value options available on the menu. | Fair deal on family buckets and burger combos.'
+        },
+        {
+          l: '🌟 Pleasant Ambience',
+          t: 'Comfortable seating and pleasant atmosphere for a casual meal. | Clean environment with good air conditioning and lighting. | Nice casual spot to sit and eat with friends. | Comfortable tables and good background music. | Relaxing spot for an evening fast-food bite.'
+        },
+        {
+          l: '👍 Solid Overall Experience',
+          t: 'Overall a very solid and enjoyable fast-food visit. | Good experience and would gladly drop by again. | Reliable quality and pleasant meal overall. | Satisfied with our meal and the service speed. | A dependable choice when craving fried chicken.'
+        }
       ].slice(0, limit);
     }
     if (r === 3) {
       return [
-        { l: '⏳ Average Wait Time', t: 'Order took a moderate amount of time to be prepared during the rush.' },
-        { l: '🍗 Decent Fried Chicken', t: 'Chicken was okay, but could have been slightly crispier.' },
-        { l: '🍔 Standard Burger', t: 'Burger was average in taste, bun was slightly dry.' },
-        { l: '🍟 Okay Fries', t: 'Fries were standard, could use a bit more seasoning.' },
-        { l: '⚡ Normal Service Speed', t: 'Counter service was standard, took a little time at the billing counter.' },
-        { l: '💰 Fair Pricing', t: 'Pricing is okay for the portion sizes.' },
-        { l: '🧼 Standard Cleanliness', t: 'Dining area was okay, though tables could be cleared faster.' },
-        { l: '😐 Mixed Experience', t: 'Average visit with some items better than others.' }
+        {
+          l: '⏳ Average Wait Time',
+          t: 'Order took a moderate amount of time to be prepared during the rush. | Had to wait around 15 minutes before the order was called. | Wait time was a bit longer than expected for fast food. | Order processing was moderate during busy hours. | Had to stand in queue for a while to collect the food.'
+        },
+        {
+          l: '🍗 Decent Fried Chicken',
+          t: 'Chicken was okay, but could have been slightly crispier. | Fried chicken was average, flavor was acceptable but nothing special. | Chicken pieces were a bit smaller than usual today. | Decent taste though slightly oily on the outside. | Taste was standard fast-food quality.'
+        },
+        {
+          l: '🍔 Standard Burger',
+          t: 'Burger was average in taste, bun was slightly dry. | Zinger burger was okay, could use a bit more sauce. | Patty was moderately crisp but expected more flavor. | Standard fast food burger, nothing extraordinary. | Bun felt slightly toasted too long.'
+        },
+        {
+          l: '🍟 Okay Fries',
+          t: 'Fries were standard, could use a bit more seasoning. | Fries were moderately warm but not ultra crispy. | Average fries, flavor was okay but could be crispier. | Standard portion of fries with light salt. | Fries were decent though a bit soft.'
+        },
+        {
+          l: '⚡ Normal Service Speed',
+          t: 'Counter service was standard, took a little time at the billing counter. | Service was average and took some time to get our tray. | Staff were busy and moving at a moderate pace. | Service was neither fast nor very slow. | Standard counter interaction.'
+        },
+        {
+          l: '💰 Fair Pricing',
+          t: 'Pricing is okay for the portion sizes. | Prices are average compared to other fast food chains. | Combos are reasonably priced though ala-carte feels high. | Fair pricing for what is served. | Cost is standard for fast food.'
+        },
+        {
+          l: '🧼 Standard Cleanliness',
+          t: 'Dining area was okay, though tables could be cleared faster. | Seating area was standard, few tables needed wiping. | Cleanliness was acceptable but has room to improve. | Restroom and counter were okay. | Average upkeep in the dining hall.'
+        },
+        {
+          l: '😐 Mixed Experience',
+          t: 'Average visit with some items better than others. | Overall an okay experience, met basic expectations. | Some dishes were good while others were just okay. | Nothing stood out particularly during this visit. | A standard average fast-food visit.'
+        }
       ].slice(0, limit);
     }
     if (r === 2) {
       return [
-        { l: '⏳ Delayed Order Delivery', t: 'Had to wait quite a long time for our order to arrive.' },
-        { l: '🍗 Chicken Was Greasy', t: 'Fried chicken was overly oily and lacked the signature crispiness.' },
-        { l: '🍔 Burger Lacked Freshness', t: 'Burger was lukewarm and bun was not fresh.' },
-        { l: '🍟 Soggy Fries', t: 'Fries were limp, greasy, and not crispy at all.' },
-        { l: '⚡ Slow Counter Service', t: 'Staff seemed overwhelmed and service was noticeably slow.' },
-        { l: '⚠️ Inattentive Staff', t: 'Staff took multiple reminders to assist with our order.' },
-        { l: '🧼 Needs Better Hygiene', t: 'Tables needed proper wiping and clearing.' },
-        { l: '📉 Scope for Improvement', t: 'Quality and turnaround time need significant improvement.' }
+        {
+          l: '⏳ Delayed Order Delivery',
+          t: 'Had to wait quite a long time for our order to arrive. | Took over 25 minutes to get a basic meal. | Unreasonable wait time for a fast-food outlet. | Multiple people who came after us got their orders first. | Order preparation was noticeably delayed.'
+        },
+        {
+          l: '🍗 Chicken Was Greasy',
+          t: 'Fried chicken was overly oily and lacked the signature crispiness. | Chicken skin was soggy and too greasy to enjoy. | Meat felt dry inside while the crust was overly oily. | Chicken was lukewarm and lacked fresh crunch. | Underwhelming chicken quality today.'
+        },
+        {
+          l: '🍔 Burger Lacked Freshness',
+          t: 'Burger was lukewarm and bun was not fresh. | Bun was dry and crumbly, and lettuce was wilted. | Burger patty felt like it was sitting under a warmer for too long. | Very little sauce and burger was bland. | Burger was sloppily put together.'
+        },
+        {
+          l: '🍟 Soggy Fries',
+          t: 'Fries were limp, greasy, and not crispy at all. | French fries arrived cold and soft. | Fries lacked seasoning and tasted stale. | Very disappointing limp fries. | Fries had no crunch and tasted reheated.'
+        },
+        {
+          l: '⚡ Slow Counter Service',
+          t: 'Staff seemed overwhelmed and service was noticeably slow. | Counter staff took a long time to punch in simple orders. | Staff communication was poor regarding order delays. | Long queue with only one billing counter open. | Service turnaround needs serious improvement.'
+        },
+        {
+          l: '⚠️ Inattentive Staff',
+          t: 'Staff took multiple reminders to assist with our order. | Staff seemed indifferent when we pointed out missing items. | Had to ask multiple times for napkins and sauce packets. | Lack of customer focus at the counter. | Unhelpful attitude when handling customer queries.'
+        },
+        {
+          l: '🧼 Needs Better Hygiene',
+          t: 'Tables needed proper wiping and clearing. | Tables were sticky and trash bins were overflowing. | Dining area looked untidy with trays left uncleaned. | Floor was sticky around the beverage dispenser. | Hygiene standards need immediate attention.'
+        },
+        {
+          l: '📉 Scope for Improvement',
+          t: 'Quality and turnaround time need significant improvement. | Disappointing visit compared to past experiences. | Food consistency was lacking today. | Hope management fixes the service speed and food freshness. | Overall below the standard expected.'
+        }
       ].slice(0, limit);
     }
     // r === 1
     return [
-      { l: '❌ Disappointing Taste', t: 'Food was far below expectations, bland, and lacked freshness.' },
-      { l: '⏳ Excessive Wait Time', t: 'Waited over 35 minutes for a simple fast food order.' },
-      { l: '❄️ Food Served Cold', t: 'Food arrived cold, stale, and not freshly prepared.' },
-      { l: '🍗 Undercooked / Oily Chicken', t: 'Chicken pieces were soggy, overly greasy, and poorly fried.' },
-      { l: '🍔 Cold Stale Burger', t: 'Burger patty was dry, cold, and bun was stale.' },
-      { l: '🍟 Limp & Stale Fries', t: 'Fries were cold, soggy, and completely unseasoned.' },
-      { l: '⚡ Unresponsive Staff', t: 'Staff were indifferent, rude, and unhelpful when we reported the issue.' },
-      { l: '🧼 Poor Cleanliness', t: 'Messy dining area with unclean tables and dirty floors.' }
+      {
+        l: '❌ Disappointing Taste',
+        t: 'Food was far below expectations, bland, and lacked freshness. | Worst fast food experience we have had in a long time. | Food tasted stale, completely unseasoned, and unpleasant. | Completely unsatisfied with the flavor and food quality. | None of the food items met basic quality standards.'
+      },
+      {
+        l: '⏳ Excessive Wait Time',
+        t: 'Waited over 35 minutes for a simple fast food order. | Horrendous delay with zero explanation from the team. | Kept waiting endlessly while the staff seemed unbothered. | Order took almost 45 minutes for fast food. | Extreme delays that ruined our dining schedule.'
+      },
+      {
+        l: '❄️ Food Served Cold',
+        t: 'Food arrived cold, stale, and not freshly prepared. | Chicken and fries were completely cold when handed to us. | Food felt like it was sitting on the counter for hours. | Cold burger with hardened cheese and chilly patty. | Lukewarm, soggy, and completely unappetizing.'
+      },
+      {
+        l: '🍗 Undercooked / Oily Chicken',
+        t: 'Chicken pieces were soggy, overly greasy, and poorly fried. | Chicken had strange smell and was not cooked properly inside. | Heavy rancid oil taste on the chicken coating. | Chicken was completely rubbery and undercooked. | Oily mess with no crunch whatsoever.'
+      },
+      {
+        l: '🍔 Cold Stale Burger',
+        t: 'Burger patty was dry, cold, and bun was stale. | Stale, rock hard bun with cold chicken patty. | Burger was completely ruined and fell apart immediately. | Disgusting burger quality that was inedible. | Sloppy, cold, and missing key ingredients.'
+      },
+      {
+        l: '🍟 Limp & Stale Fries',
+        t: 'Fries were cold, soggy, and completely unseasoned. | Stale limp fries that tasted like they were fried hours ago. | Oily, cold potato fries with zero crispiness. | Inedible fries that were thrown away. | Complete waste of money on the fries.'
+      },
+      {
+        l: '⚡ Unresponsive Staff',
+        t: 'Staff were indifferent, rude, and unhelpful when we reported the issue. | Counter staff completely ignored customer complaints. | Extremely unprofessional and disrespectful behavior from staff. | Staff showed zero empathy or willingness to fix our order. | Worst customer service encounter.'
+      },
+      {
+        l: '🧼 Poor Cleanliness',
+        t: 'Messy dining area with unclean tables and dirty floors. | Dirty tables everywhere with leftover food and flies. | Disgusting hygiene conditions in the eating area. | Trash all over the floor and bins overflowing. | Needs serious health inspection and cleaning.'
+      }
     ].slice(0, limit);
   }
 
   if (isDessertCafe) {
     if (r === 5) {
       return [
-        { l: '🍦 Creamy ice creams', t: 'The ice creams are exquisitely creamy, rich, and full of delightful flavours.' },
-        { l: '🥤 Thick milkshakes', t: 'The thick milkshakes are perfectly blended and an absolute treat.' },
-        { l: '🍕 Cheesy hot pizza', t: 'The pizzas are freshly baked with a golden crispy crust and plenty of cheese.' },
-        { l: '🍗 Crispy fried chicken', t: 'The fried chicken is crispy on the outside, tender and juicy inside.' },
-        { l: '⚡ Lightning fast service', t: 'The service is exceptionally prompt, and the staff are warmly welcoming.' },
-        { l: '💰 Pocket-friendly', t: 'Generous portions at very reasonable prices — outstanding value.' },
-        { l: '🌟 Fairy light ambience', t: 'The night fairy lights and vibrant ambience create a wonderful cozy vibe.' },
-        { l: '🍨 Cream More Delight', t: 'The Cream More special desserts and sundaes are top-notch and a must-try.' },
-        { l: '💖 Highly recommend', t: 'Hands down one of the finest food and dessert spots in town — 10/10 experience!' }
+        {
+          l: '🍦 Creamy ice creams',
+          t: 'The ice creams are exquisitely creamy, rich, and full of delightful flavours. | Incredible range of rich ice cream varieties made with top quality ingredients. | Ice creams were velvety smooth and packed with authentic flavors. | Loved the ice cream sundaes — absolute perfection in every spoonful. | The texture and creaminess of their ice creams are unmatched in town.'
+        },
+        {
+          l: '🥤 Thick milkshakes',
+          t: 'The thick milkshakes are perfectly blended and an absolute treat. | The milkshakes are thick, creamy, and totally worth every rupee. | Shakes were thick, chilled, and rich with authentic flavors. | Loved the thick shake blends — so filling and delightful. | One of the best thick shake spots with great topping combinations.'
+        },
+        {
+          l: '🍕 Cheesy hot pizza',
+          t: 'The pizzas are freshly baked with a golden crispy crust and plenty of cheese. | Pizza was fresh, cheesy, and perfectly baked — loved every bite. | The crust was wonderfully crispy and loaded with delicious toppings. | Delicious melted mozzarella and rich savory pizza sauce. | Hot out of the oven pizza that exceeded all expectations.'
+        },
+        {
+          l: '🍗 Crispy fried chicken',
+          t: 'The fried chicken is super crispy outside, tender and juicy inside. | Fried chicken had amazing crunch and bold seasoning. | Piping hot fried chicken that is full of rich flavor. | Crispy chicken pieces cooked to golden perfection. | Loved the fried chicken tenders and crunchy bites.'
+        },
+        {
+          l: '⚡ Lightning fast service',
+          t: 'Service was quick and the staff were very friendly and welcoming. | Counter service was exceptionally prompt and polite. | Fast turnaround and great hospitality throughout our visit. | Staff greeted us warmly and brought our order swiftly. | Extremely prompt and attentive service.'
+        },
+        {
+          l: '💰 Pocket-friendly',
+          t: 'Great food at very affordable prices — outstanding value for money. | Generous portion sizes with pocket-friendly pricing. | Fantastic value considering the premium taste and quality. | Affordable menu combos that are great for students and families. | Very reasonable rates for high quality food and desserts.'
+        },
+        {
+          l: '🌟 Fairy light ambience',
+          t: 'The fairy light ambience is stunning — perfect for hangouts with family and friends. | Beautiful outdoor lighting and cozy seating arrangement. | Magical night vibe with fairy lights and great music. | Wonderful atmosphere for evening coffee, desserts, and talks. | Picturesque ambience that makes dining here special.'
+        },
+        {
+          l: '🍨 Cream More Delight',
+          t: 'The Cream More special desserts and sundaes are top-notch and a must-try. | Signature sundaes and desserts are pure bliss. | Loaded dessert bowls that satisfy every sweet craving. | Incredible flavor combinations on their special dessert menu. | A must-try dessert experience for everyone visiting.'
+        },
+        {
+          l: '💖 Highly recommend',
+          t: 'Hands down one of the finest food and dessert spots in town — 10/10 experience! | Highly recommend this place to all foodies, friends, and families! | An absolute gem for snacks, pizzas, and desserts. | Loved every single thing we ordered — will definitely be back! | 5-star experience from start to finish.'
+        }
       ].slice(0, limit);
     }
     if (r === 4) {
       return [
-        { l: '🍦 Tasty ice creams', t: 'Good variety of ice cream options and delicious taste.' },
-        { l: '🥤 Delicious shakes', t: 'Milkshakes had great consistency and rich flavour.' },
-        { l: '🍕 Fresh hot pizza', t: 'Pizza was tasty and served fresh out of the oven.' },
-        { l: '🍗 Good fried chicken', t: 'Crispy fried chicken seasoned nicely.' },
-        { l: '⚡ Friendly staff', t: 'Friendly staff and prompt response throughout our visit.' },
-        { l: '💰 Great value', t: 'Good food quality for the price paid.' },
-        { l: '🌟 Cozy atmosphere', t: 'Pleasant lighting and comfortable seating.' }
+        {
+          l: '🍦 Tasty ice creams',
+          t: 'Good variety of ice cream options and delicious taste. | Enjoyed the smooth ice cream flavors and scoops. | Nice quality ice cream with good sweetness balance. | Ice creams were refreshing and enjoyable. | Good dessert options on the menu.'
+        },
+        {
+          l: '🥤 Delicious shakes',
+          t: 'Milkshakes had great consistency and rich flavour. | Shakes were tasty, chilled, and nicely blended. | Good thickness and enjoyable shake flavors. | Satisfying milkshakes that paired nicely with the food. | Enjoyed the shake varieties on offer.'
+        },
+        {
+          l: '🍕 Fresh hot pizza',
+          t: 'Pizza was tasty and served fresh out of the oven. | Good crust texture and tasty cheese on the pizza. | Hot and freshly baked pizza that satisfied our craving. | Enjoyed the pizza slice portions and flavors. | Decent pizza with good toppings.'
+        },
+        {
+          l: '🍗 Good fried chicken',
+          t: 'Crispy fried chicken seasoned nicely. | Chicken was crispy on the outside and cooked well. | Enjoyed the fried chicken snack with our drinks. | Good flavor and warmth on the chicken pieces. | Tasty chicken sides.'
+        },
+        {
+          l: '⚡ Friendly staff',
+          t: 'Friendly staff and prompt response throughout our visit. | Polite counter team who took our orders smoothly. | Helpful staff with quick order preparation. | Courteous service and pleasant interaction. | Staff handled our requests with a smile.'
+        },
+        {
+          l: '💰 Great value',
+          t: 'Good food quality for the price paid. | Reasonable prices across the dessert and snack menu. | Good value for families and groups. | Fair pricing for the portion sizes. | Affordable and satisfying.'
+        },
+        {
+          l: '🌟 Cozy atmosphere',
+          t: 'Pleasant lighting and comfortable seating. | Nice casual environment for an evening hangout. | Cozy seating area with nice vibes. | Clean and comfortable cafe setup. | Relaxing spot to spend time with friends.'
+        }
       ].slice(0, limit);
     }
     if (r === 3) {
       return [
-        { l: '⏳ Average Wait Time', t: 'Order took a moderate amount of time to arrive.' },
-        { l: '🍦 Standard Ice Cream', t: 'Average ice cream options with standard quality.' },
-        { l: '🥤 Okay Milkshakes', t: 'Milkshakes were okay and reasonably chilled.' },
-        { l: '🍕 Average Pizza', t: 'Decent pizza crust and toppings, nothing extraordinary.' },
-        { l: '⚡ Normal Service', t: 'Service was standard and handled reasonably.' },
-        { l: '💰 Fair Pricing', t: 'Prices are reasonable for the portions.' },
-        { l: '🧼 Standard Cleanliness', t: 'Ambience was fine for a quick stop.' }
+        {
+          l: '⏳ Average Wait Time',
+          t: 'Order took a moderate amount of time to arrive. | Waited about 15-20 minutes for our desserts and pizza. | Moderate service turnaround during evening hours. | Order was a bit delayed but acceptable. | Average waiting time for preparation.'
+        },
+        {
+          l: '🍦 Standard Ice Cream',
+          t: 'Average ice cream options with standard quality. | Ice cream was okay, standard taste and flavors. | Nothing extraordinary, standard commercial ice cream. | Decent ice cream scoop though sweetness was a bit high. | Okay quality for a casual treat.'
+        },
+        {
+          l: '🥤 Okay Milkshakes',
+          t: 'Milkshakes were okay and reasonably chilled. | Shake was a bit thinner than expected but tasted fine. | Standard milkshake, decent flavor. | Average shake consistency. | Okay drink for a quick stop.'
+        },
+        {
+          l: '🍕 Average Pizza',
+          t: 'Decent pizza crust and toppings, nothing extraordinary. | Pizza was okay, standard bakery style crust. | Moderate cheese and toppings on the pizza. | Average pizza flavor, could use more herbs. | Okay pizza for a quick snack.'
+        },
+        {
+          l: '⚡ Normal Service',
+          t: 'Service was standard and handled reasonably. | Standard counter interaction with moderate speed. | Staff were busy and service was okay. | Normal turnaround for desserts and snacks. | Standard customer experience.'
+        },
+        {
+          l: '💰 Fair Pricing',
+          t: 'Prices are reasonable for the portions. | Standard cafe pricing for desserts and drinks. | Average value for the items ordered. | Prices are okay, neither cheap nor expensive. | Fair menu rates.'
+        },
+        {
+          l: '🧼 Standard Cleanliness',
+          t: 'Ambience was fine for a quick stop. | Tables were okay, some needed clearing. | Average cafe upkeep and lighting. | Moderate cleanliness in the seating area. | Standard casual environment.'
+        }
       ].slice(0, limit);
     }
     if (r === 2) {
       return [
-        { l: '⏳ Long Waiting Delay', t: 'Had to wait much longer than expected for ice creams and food.' },
-        { l: '🍦 Melted Ice Cream', t: 'Ice cream was partially melted by the time it was served.' },
-        { l: '🥤 Watery Milkshake', t: 'Milkshake was too thin and lacked flavor.' },
-        { l: '🍕 Soggy Pizza Crust', t: 'Pizza crust was soft and toppings were sparse.' },
-        { l: '⚡ Slow Service', t: 'Staff seemed busy and service was delayed.' },
-        { l: '🧼 Needs Better Upkeep', t: 'Tables were not wiped promptly after previous guests.' }
+        {
+          l: '⏳ Long Waiting Delay',
+          t: 'Had to wait much longer than expected for ice creams and food. | Took over 30 minutes for simple shakes and pizza. | Inordinate delay with no communication from staff. | Slow kitchen turnaround during our visit. | Long wait that dampened our mood.'
+        },
+        {
+          l: '🍦 Melted Ice Cream',
+          t: 'Ice cream was partially melted by the time it was served. | Sundae arrived soft and runny instead of chilled. | Ice cream had icy crystallization and lacked creaminess. | Melted mess served in a sticky bowl. | Poor temperature maintenance on ice creams.'
+        },
+        {
+          l: '🥤 Watery Milkshake',
+          t: 'Milkshake was too thin and lacked flavor. | Shake tasted like plain milk with little syrup. | Watery consistency with barely any ice cream. | Lack of thickness and flavor in the shake. | Disappointing milkshake quality.'
+        },
+        {
+          l: '🍕 Soggy Pizza Crust',
+          t: 'Pizza crust was soft and toppings were sparse. | Pizza was underbaked and doughy in the center. | Very little cheese and flavorless sauce. | Soggy base with uneven cooking. | Substandard pizza quality.'
+        },
+        {
+          l: '⚡ Slow Service',
+          t: 'Staff seemed busy and service was delayed. | Had to remind staff multiple times about our order. | Disorganized counter and slow order dispatch. | Staff took long to clear and serve tables. | Service needs better management.'
+        },
+        {
+          l: '🧼 Needs Better Upkeep',
+          t: 'Tables were not wiped promptly after previous guests. | Sticky tables and floor needed cleaning. | Lighting was dim and area felt neglected. | Waste bins were full and seating was untidy. | Cleanliness needs serious improvement.'
+        }
       ].slice(0, limit);
     }
     // r === 1
     return [
-      { l: '❌ Disappointing Experience', t: 'Food and desserts were well below standard.' },
-      { l: '⏳ Excessive Wait Delay', t: 'Waited over 40 minutes with no updates from staff.' },
-      { l: '❄️ Food Served Cold', t: 'Hot items arrived cold and ice cream arrived melted.' },
-      { l: '🥤 Poor Quality Shakes', t: 'Shakes were watery and lacked authentic flavor.' },
-      { l: '⚡ Unresponsive Staff', t: 'Staff ignored requests and showed poor customer care.' },
-      { l: '🧼 Unclean Tables', t: 'Tables and floor were messy and not maintained.' }
+      {
+        l: '❌ Disappointing Experience',
+        t: 'Food and desserts were well below standard. | Terribly disappointing visit with poor food and drinks. | None of the ordered items tasted fresh or enjoyable. | Complete waste of time and money today. | Would not recommend based on this experience.'
+      },
+      {
+        l: '⏳ Excessive Wait Delay',
+        t: 'Waited over 40 minutes with no updates from staff. | Left waiting endlessly for simple ice creams and snacks. | Worst turnaround time imaginable for a dessert spot. | Staff kept stalling and making excuses. | Unacceptable delay from the kitchen.'
+      },
+      {
+        l: '❄️ Food Served Cold',
+        t: 'Hot items arrived cold and ice cream arrived melted. | Pizza was stone cold and unbaked. | Fried items were cold, oily, and stale. | Ice cream was served completely melted as soup. | Terribly mishandled food temperature.'
+      },
+      {
+        l: '🥤 Poor Quality Shakes',
+        t: 'Shakes were watery and lacked authentic flavor. | Shakes tasted stale with sour milk undertone. | Horrible watery taste with artificial flavoring. | Inedible shakes that we could not finish. | Completely ruined beverage order.'
+      },
+      {
+        l: '⚡ Unresponsive Staff',
+        t: 'Staff ignored requests and showed poor customer care. | Rude and argumentative counter personnel. | Staff showed zero interest in resolving order issues. | Horrible customer service experience. | Completely unhelpful staff behavior.'
+      },
+      {
+        l: '🧼 Unclean Tables',
+        t: 'Tables and floor were messy and not maintained. | Sticky tables with flies and leftover plates everywhere. | Gross hygiene in the dining area. | Filthy seating and messy surroundings. | Needs immediate deep cleaning and sanitation.'
+      }
     ].slice(0, limit);
   }
 
   // General Business Fallback
   if (r === 5) {
     return [
-      { l: '⚡ Outstanding Service', t: 'Service was lightning fast, professional, and handled with great care.' },
-      { l: '🌟 Top Quality', t: 'Exceptional quality that exceeded all our expectations.' },
-      { l: '💼 Professional Team', t: 'Staff were extremely welcoming, polite, and attentive.' },
-      { l: '💰 Great Value', t: 'Outstanding value for money with high quality standards.' },
-      { l: '🧼 Spotless & Clean', t: 'Very clean, neat, and well-maintained environment.' },
-      { l: '💖 Highly Recommended', t: '10/10 experience — highly recommend to everyone!' }
+      {
+        l: '⚡ Outstanding Service',
+        t: 'Service was lightning fast, professional, and handled with great care. | The staff provided top-tier customer assistance throughout. | Prompt, efficient, and exceptionally courteous service. | Fast, reliable, and very pleasant experience. | Handled everything smoothly and with a warm smile.'
+      },
+      {
+        l: '🌟 Top Quality',
+        t: 'Exceptional quality that exceeded all our expectations. | 5-star quality and top-notch standards across the board. | Unmatched quality and attention to detail. | Consistently great results and premium experience. | Top tier in every aspect of their offering.'
+      },
+      {
+        l: '💼 Professional Team',
+        t: 'Staff were extremely welcoming, polite, and attentive. | Professional, knowledgeable, and helpful team. | Courteous professionals who care about their customers. | Great team coordination and seamless assistance. | Warm hospitality and utmost professionalism.'
+      },
+      {
+        l: '💰 Great Value',
+        t: 'Outstanding value for money with high quality standards. | Reasonable rates for such exceptional service and quality. | Pocket-friendly pricing with premium delivery. | Best value for money you can find in the area. | Worth every single penny spent.'
+      },
+      {
+        l: '🧼 Spotless & Clean',
+        t: 'Very clean, neat, and well-maintained environment. | Spotless cleanliness and high hygiene standards maintained. | Clean, comfortable, and welcoming space. | Pristine surroundings and tidy presentation. | Beautiful, spotless, and sanitized area.'
+      },
+      {
+        l: '💖 Highly Recommended',
+        t: '10/10 experience — highly recommend to everyone! | Hands down one of the best places around. | Will definitely be returning and recommending to others! | A truly delightful experience from start to finish. | 5 stars all the way — exceptional service!'
+      }
     ].slice(0, limit);
   }
   if (r === 4) {
     return [
-      { l: '⚡ Prompt Service', t: 'Service was quick and staff were helpful throughout.' },
-      { l: '🌟 Good Quality', t: 'Good quality and satisfied with our overall visit.' },
-      { l: '💼 Helpful Team', t: 'Staff were polite and assisted us promptly.' },
-      { l: '💰 Fair Price', t: 'Good pricing for the service received.' },
-      { l: '🧼 Clean & Tidy', t: 'Clean environment and comfortable experience.' }
+      {
+        l: '⚡ Prompt Service',
+        t: 'Service was quick and staff were helpful throughout. | Prompt response and smooth overall process. | Good customer service and timely assistance. | Handled our request efficiently. | Reliable and pleasant service.'
+      },
+      {
+        l: '🌟 Good Quality',
+        t: 'Good quality and satisfied with our overall visit. | Solid standards and dependable experience. | Quality met our expectations nicely. | Good overall delivery and presentation. | Enjoyable and satisfactory experience.'
+      },
+      {
+        l: '💼 Helpful Team',
+        t: 'Staff were polite and assisted us promptly. | Friendly team who answered our questions clearly. | Good communication and helpful attitude. | Courteous and attentive staff members. | Smooth interaction with the team.'
+      },
+      {
+        l: '💰 Fair Price',
+        t: 'Good pricing for the service received. | Reasonable rates and fair value overall. | Decent pricing structure. | Good balance of price and quality. | Affordable and well-priced.'
+      },
+      {
+        l: '🧼 Clean & Tidy',
+        t: 'Clean environment and comfortable experience. | Well-kept premises with pleasant atmosphere. | Neat, tidy, and organized setup. | Comfortable seating and clean surroundings. | Pleasant and well-maintained.'
+      }
     ].slice(0, limit);
   }
   if (r === 3) {
     return [
-      { l: '⏳ Average Wait Time', t: 'Moderate wait time, average overall experience.' },
-      { l: '⚡ Standard Service', t: 'Service was standard and acceptable.' },
-      { l: '🌟 Decent Quality', t: 'Quality was okay, but has room for improvement.' },
-      { l: '💰 Fair Pricing', t: 'Standard pricing for what is offered.' },
-      { l: '😐 Mixed Experience', t: 'Some things were good, while other areas need attention.' }
+      {
+        l: '⏳ Average Wait Time',
+        t: 'Moderate wait time, average overall experience. | Took a normal amount of time to be served. | Turnaround was acceptable though could be faster. | Moderate queue and standard waiting time. | Average processing speed.'
+      },
+      {
+        l: '⚡ Standard Service',
+        t: 'Service was standard and acceptable. | Routine service, met basic expectations. | Staff were polite enough, standard interaction. | Average assistance provided. | Standard experience with no major highlights.'
+      },
+      {
+        l: '🌟 Decent Quality',
+        t: 'Quality was okay, but has room for improvement. | Decent overall, met everyday standards. | Standard quality, nothing extraordinary. | Acceptable outcome though expected a bit more. | Fair quality for casual needs.'
+      },
+      {
+        l: '💰 Fair Pricing',
+        t: 'Standard pricing for what is offered. | Fair rates in line with market averages. | Pricing was okay for the level of service. | Reasonable cost overall. | Fair charges.'
+      },
+      {
+        l: '😐 Mixed Experience',
+        t: 'Some things were good, while other areas need attention. | Overall an okay visit with moderate satisfaction. | Mixed feelings, decent but could be polished. | Average experience overall. | Standard visit.'
+      }
     ].slice(0, limit);
   }
   if (r === 2) {
     return [
-      { l: '⏳ Long Waiting Delay', t: 'Had to wait far longer than expected.' },
-      { l: '⚡ Slow Service', t: 'Service was sluggish and poorly coordinated.' },
-      { l: '⚠️ Inattentive Staff', t: 'Staff seemed indifferent to customer requests.' },
-      { l: '📉 Quality Below Standard', t: 'Quality did not meet expectations.' },
-      { l: '🧼 Hygiene Needs Work', t: 'Cleanliness and maintenance need improvement.' }
+      {
+        l: '⏳ Long Waiting Delay',
+        t: 'Had to wait far longer than expected. | Unreasonable delay before we received assistance. | Long wait time that caused frustration. | Poor timing and delayed delivery. | Slow process from start to finish.'
+      },
+      {
+        l: '⚡ Slow Service',
+        t: 'Service was sluggish and poorly coordinated. | Staff seemed disorganized and slow to respond. | Lack of urgency in handling requests. | Slow turnaround that needs improvement. | Disappointing service efficiency.'
+      },
+      {
+        l: '⚠️ Inattentive Staff',
+        t: 'Staff seemed indifferent to customer requests. | Had to follow up repeatedly to get basic help. | Lack of attentiveness from the on-duty staff. | Poor customer focus and communication. | Staff appeared disengaged.'
+      },
+      {
+        l: '📉 Quality Below Standard',
+        t: 'Quality did not meet expectations. | Substandard output that needs rework. | Quality was below the promised standard. | Disappointed with the final result. | Expected much better quality.'
+      },
+      {
+        l: '🧼 Hygiene Needs Work',
+        t: 'Cleanliness and maintenance need improvement. | Premises looked untidy and neglected. | Needs better upkeep and regular cleaning. | Poor maintenance in key areas. | Cleanliness was below acceptable levels.'
+      }
     ].slice(0, limit);
   }
   // r === 1
   return [
-    { l: '❌ Poor Experience', t: 'Extremely disappointing experience from start to finish.' },
-    { l: '⏳ Excessive Delay', t: 'Unreasonable delays and lack of communication.' },
-    { l: '⚡ Unresponsive Staff', t: 'Staff were unhelpful, inattentive, and rude.' },
-    { l: '⚠️ Unacceptable Quality', t: 'Quality was completely below standard.' },
-    { l: '🧼 Unhygienic Conditions', t: 'Poor hygiene and lack of proper cleanliness.' }
+    {
+      l: '❌ Poor Experience',
+      t: 'Extremely disappointing experience from start to finish. | Completely unsatisfied with the entire visit. | Terribly handled and fell far short of basic standards. | Worst experience we have had here. | Would not recommend based on this experience.'
+    },
+    {
+      l: '⏳ Excessive Delay',
+      t: 'Unreasonable delays and lack of communication. | Left waiting endlessly with zero explanation. | Unacceptable wait times that ruined our plans. | Extreme delays with no customer consideration. | Terrible turnaround.'
+    },
+    {
+      l: '⚡ Unresponsive Staff',
+      t: 'Staff were unhelpful, inattentive, and rude. | Disrespectful attitude when we raised concerns. | Complete lack of professionalism from staff. | Inattentive team that ignored customer requests. | Worst customer service.'
+    },
+    {
+      l: '⚠️ Unacceptable Quality',
+      t: 'Quality was completely below standard. | Terrible quality that was unusable. | Unacceptable defects and poor execution. | Total failure in meeting quality standards. | Complete waste of money.'
+    },
+    {
+      l: '🧼 Unhygienic Conditions',
+      t: 'Poor hygiene and lack of proper cleanliness. | Disgustingly dirty premises and poor sanitation. | Terrible upkeep and unhygienic surroundings. | Health hazard with zero maintenance. | Needs urgent inspection and deep clean.'
+    }
   ].slice(0, limit);
 }
 
@@ -1110,7 +1416,7 @@ function synthesizeFromSelectedTags({ tags = [], rating = 5, bizName = 'this pla
     `Such a fantastic spot!`,
     `Always a pleasure visiting ${bizName}.`,
     `Stopped by ${bizName} and had a wonderful time.`,
-    `Hands down one of the best spots around —`,
+    `Hands down one of the best spots around!`,
     `Super happy with our visit to ${bizName}!`,
     `Had an absolute 10/10 experience here today.`,
     `A truly delightful visit to ${bizName}!`
@@ -1401,8 +1707,8 @@ function synthesizeFromSelectedTags({ tags = [], rating = 5, bizName = 'this pla
   function getClauseForTag(tagStr) {
     const s = tagStr.toLowerCase();
     
-    // Check if client has custom tag template in database
-    if (client && client.tags) {
+    // Check if client has custom tag template in database (for 5-star)
+    if (r === 5 && client && client.tags) {
       try {
         const clientTags = JSON.parse(client.tags);
         const match = clientTags.find(t => (t.l || t.label || '').toLowerCase().includes(s) || s.includes((t.l || t.label || '').toLowerCase()));
@@ -1410,11 +1716,21 @@ function synthesizeFromSelectedTags({ tags = [], rating = 5, bizName = 'this pla
           const variants = match.t.split(/\||\n/).map(x => x.trim()).filter(Boolean);
           if (variants.length > 0) {
             const chosen = pickRandom(variants);
-            // If it's a short clause or full sentence, normalize for insertion
             return chosen.replace(/\.+$/, '');
           }
         }
       } catch(e) {}
+    }
+
+    // Check rating-calibrated local tags (guaranteed 5+ review variants per tag for 1-5 stars)
+    const localTags = localGetTagsForRating(r, 20, client);
+    const localMatch = localTags.find(t => (t.l || t.label || '').toLowerCase().includes(s) || s.includes((t.l || t.label || '').toLowerCase()));
+    if (localMatch && localMatch.t) {
+      const variants = localMatch.t.split(/\||\n/).map(x => x.trim()).filter(Boolean);
+      if (variants.length > 0) {
+        const chosen = pickRandom(variants);
+        return chosen.replace(/\.+$/, '');
+      }
     }
 
     let pool = null;
@@ -1480,10 +1796,14 @@ function synthesizeFromSelectedTags({ tags = [], rating = 5, bizName = 'this pla
   const cRest = clauses.slice(2);
   const restJoined = cRest.length === 1 ? cRest[0] : cRest.slice(0, -1).join(', ') + ', and ' + cRest[cRest.length - 1];
 
-  const multiPatterns = [
+  const multiPatterns = r >= 4 ? [
     `${opener} ${c0.charAt(0).toUpperCase() + c0.slice(1)}, and ${c1}. On top of that, ${restJoined}. ${closing}`,
     `${opener} Really loved that ${c0} plus ${c1}. Also, ${restJoined}. ${closing}`,
-    `Everything was on point at ${bizName} today! ${c0.charAt(0).toUpperCase() + c0.slice(1)}, ${c1}, and ${restJoined}. ${closing}`
+    `Everything was great at ${bizName}! ${c0.charAt(0).toUpperCase() + c0.slice(1)}, ${c1}, and ${restJoined}. ${closing}`
+  ] : [
+    `${opener} ${c0.charAt(0).toUpperCase() + c0.slice(1)}, and ${c1}. On top of that, ${restJoined}. ${closing}`,
+    `${opener} Main issue was that ${c0}, along with ${c1}. Furthermore, ${restJoined}. ${closing}`,
+    `${opener} We experienced that ${c0}, plus ${c1}. Also, ${restJoined}. ${closing}`
   ];
   return pickRandom(multiPatterns);
 }
