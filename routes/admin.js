@@ -146,6 +146,17 @@ router.post('/clients/:id/delete', requireAuth, (req, res) => {
   res.redirect('/admin');
 });
 
+router.post('/clients/:id/quick-theme', requireAuth, (req, res) => {
+  const { primary_theme } = req.body;
+  const themeMode = ['dark', 'light', 'system'].includes(primary_theme) ? primary_theme : 'dark';
+  try {
+    db.prepare('UPDATE clients SET primary_theme = ? WHERE id = ?').run(themeMode, req.params.id);
+    res.json({ ok: true, theme: themeMode });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ── QR CODE ───────────────────────────────────────────────────────
 router.get('/clients/:id/qr', requireAuth, async (req, res) => {
   const client = db.prepare('SELECT * FROM clients WHERE id=?').get(req.params.id);
@@ -282,6 +293,23 @@ button{font-family:'DM Sans',sans-serif}
 .badge-purple{background:rgba(167,139,250,0.1);color:var(--accent);border:1px solid rgba(167,139,250,0.2)}
 .badge-yellow{background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.25)}
 .badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+/* ── THEME QUICK SELECT & TOAST ── */
+.theme-quick-wrap{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);padding:3px 8px;border-radius:20px;transition:all .2s cubic-bezier(0.4,0,0.2,1)}
+.theme-quick-wrap:hover{background:rgba(255,255,255,0.09);border-color:rgba(167,139,250,0.4);box-shadow:0 0 10px rgba(124,77,255,0.2)}
+.theme-quick-select{
+  appearance:none;-webkit-appearance:none;background:transparent;border:none;color:var(--t1);
+  font-size:11.5px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;outline:none;
+  padding-right:14px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='rgba(240,232,255,0.6)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right center;
+}
+.theme-quick-select option{background:#16161f;color:#f0e8ff}
+#toastBox{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast-msg{background:var(--s2);border:1px solid var(--b2);color:var(--t1);padding:10px 16px;border-radius:10px;font-size:12.5px;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:flex;align-items:center;gap:8px;animation:toastIn .2s cubic-bezier(0.4,0,0.2,1);pointer-events:auto}
+.toast-msg.success{border-color:rgba(52,211,153,0.3);color:var(--green)}
+.toast-msg.error{border-color:rgba(248,113,113,0.3);color:var(--red)}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid;transition:all .15s;font-family:'DM Sans',sans-serif;white-space:nowrap}
@@ -431,10 +459,14 @@ function dashboardPage(clients) {
           </td>
           <td><span class="badge badge-purple">${esc(c.category)}</span></td>
           <td>
-            <span class="badge" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:var(--t1);display:inline-flex;align-items:center;gap:6px">
-              <span style="width:8px;height:8px;border-radius:50%;background:${esc(themeColor)};display:inline-block;box-shadow:0 0 6px ${esc(themeColor)}"></span>
-              ${themeLabel}
-            </span>
+            <div class="theme-quick-wrap" title="Directly change theme">
+              <span style="width:8px;height:8px;border-radius:50%;background:${esc(themeColor)};display:inline-block;box-shadow:0 0 6px ${esc(themeColor)};flex-shrink:0"></span>
+              <select class="theme-quick-select" onchange="quickUpdateTheme(${c.id}, this.value, this)" data-prev="${esc(c.primary_theme||'dark')}">
+                <option value="dark" ${c.primary_theme === 'dark' ? 'selected' : ''}>🌙 Dark</option>
+                <option value="light" ${c.primary_theme === 'light' ? 'selected' : ''}>☀️ Light</option>
+                <option value="system" ${c.primary_theme === 'system' ? 'selected' : ''}>📱 Auto</option>
+              </select>
+            </div>
             ${c.allow_theme_toggle === 0 ? '<div class="text-xs mt4" style="color:var(--yellow);font-size:10px">🔒 Locked</div>' : ''}
           </td>
           <td>
@@ -513,6 +545,49 @@ function dashboardPage(clients) {
         <tbody>${rows}</tbody>
       </table>
     </div>
+
+    <div id="toastBox"></div>
+    <script>
+      function showToast(msg, isErr = false) {
+        const box = document.getElementById('toastBox');
+        if (!box) return;
+        const t = document.createElement('div');
+        t.className = 'toast-msg ' + (isErr ? 'error' : 'success');
+        t.innerHTML = (isErr ? '<i class="ti ti-alert-circle"></i> ' : '<i class="ti ti-check"></i> ') + msg;
+        box.appendChild(t);
+        setTimeout(() => {
+          t.style.opacity = '0';
+          t.style.transform = 'translateY(10px)';
+          t.style.transition = 'all 0.2s';
+          setTimeout(() => t.remove(), 200);
+        }, 2500);
+      }
+
+      async function quickUpdateTheme(clientId, theme, selectEl) {
+        const prev = selectEl.getAttribute('data-prev') || 'dark';
+        selectEl.disabled = true;
+        try {
+          const res = await fetch('/admin/clients/' + clientId + '/quick-theme', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ primary_theme: theme })
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            selectEl.setAttribute('data-prev', theme);
+            const label = theme === 'light' ? 'Light ☀️' : theme === 'system' ? 'Auto 📱' : 'Dark 🌙';
+            showToast('Theme set to ' + label);
+          } else {
+            throw new Error((data && data.error) || 'Failed to update theme');
+          }
+        } catch (err) {
+          selectEl.value = prev;
+          showToast(err.message || 'Error updating theme', true);
+        } finally {
+          selectEl.disabled = false;
+        }
+      }
+    </script>
   `);
 }
 

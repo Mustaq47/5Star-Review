@@ -180,7 +180,7 @@ function reviewPage(client, tags) {
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>Review — ${esc(client.business_name)}</title>
 <meta name="description" content="Share your experience at ${esc(client.business_name)}">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900;1,9..40,400&family=Montserrat:ital,wght@1,900&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900;1,9..40,400&family=Montserrat:ital,wght@0,700;0,800;0,900;1,700;1,800;1,900&family=Outfit:ital,wght@0,700;0,800;0,900;1,700;1,800;1,900&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <style>
 :root{ --brand:${color}; }
@@ -226,7 +226,7 @@ ${isCoolSpicy ? `
 
 ${isKfc ? `
 .biz-name {
-  font-family: 'Montserrat', 'DM Sans', sans-serif !important;
+  font-family: 'Montserrat', 'Outfit', sans-serif !important;
   font-weight: 900 !important;
   font-style: italic !important;
   letter-spacing: 0.8px !important;
@@ -260,8 +260,6 @@ ${isKfc ? `
 .root.dark  .dot{background:rgba(244,63,94,0.2) !important}
 .root.light .dot.on{background:#e4002b !important}
 .root.dark  .dot.on{background:#fb7185 !important}
-.root.light .mode-btn{background:rgba(255,255,255,0.7);border:1px solid rgba(254,205,211,0.9);box-shadow:0 2px 10px rgba(228,0,43,0.12)}
-.root.dark  .mode-btn{background:rgba(228,0,43,0.12);border:1px solid rgba(244,63,94,0.25)}
 .root.light .glass{background:rgba(255,255,255,0.68);border:1px solid rgba(255,255,255,0.95);box-shadow:0 12px 48px rgba(228,0,43,0.12),inset 0 1px 0 rgba(255,255,255,0.95)}
 .root.dark  .glass{background:rgba(26,6,10,0.65);border:1px solid rgba(244,63,94,0.22);box-shadow:0 12px 52px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.06)}
 .root.light .biz-logo{background:transparent !important;border:none !important;box-shadow:none !important}
@@ -272,6 +270,29 @@ ${isKfc ? `
 .root.dark  .sb.lit{background:rgba(228,0,43,0.15);border-color:rgba(244,63,94,0.35)}
 .root.light .rchip{background:rgba(255,255,255,0.6);border-color:rgba(254,205,211,0.85)}
 .root.dark  .rchip{background:rgba(228,0,43,0.08);border-color:rgba(244,63,94,0.2)}
+.rchip .rv {
+  font-family: 'Montserrat', 'Outfit', sans-serif !important;
+  font-weight: 900 !important;
+  font-style: italic !important;
+  letter-spacing: -0.5px !important;
+  font-size: 30px !important;
+  color: #e4002b !important;
+  text-shadow: 0 2px 12px rgba(228,0,43,0.25) !important;
+  line-height: 1 !important;
+}
+.root.dark .rchip .rv {
+  color: #ff334b !important;
+  text-shadow: 0 0 16px rgba(255,42,64,0.5) !important;
+}
+.rchip .rw {
+  font-family: 'Montserrat', 'Outfit', sans-serif !important;
+  font-weight: 800 !important;
+  font-style: italic !important;
+  letter-spacing: 0.3px !important;
+  font-size: 16px !important;
+}
+.root.light .rchip .rw { color: #881337 !important; }
+.root.dark  .rchip .rw { color: #ffe4e6 !important; }
 .root.light .tw{background:rgba(255,255,255,0.8);border-color:rgba(254,205,211,0.95);box-shadow:0 2px 14px rgba(228,0,43,0.06)}
 .root.dark  .tw{background:rgba(22,5,8,0.7);border-color:rgba(244,63,94,0.25);box-shadow:0 2px 16px rgba(0,0,0,0.4)}
 .root.light .tw:focus-within{border-color:rgba(228,0,43,0.8);background:rgba(255,255,255,0.95);box-shadow:0 0 0 3px rgba(228,0,43,0.14),0 4px 20px rgba(228,0,43,0.1)}
@@ -562,11 +583,12 @@ ${isKfc ? `
   color: #ffffff;
 }
 .root.dark .tag.on {
-  background: #38bdf8;
-  border-color: #38bdf8;
-  color: #082f49;
-  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.3);
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.4);
 }
+
 
 /* ── ACTIONS ── */
 .acts{display:flex;flex-direction:column;gap:9px}
@@ -660,7 +682,7 @@ ${isKfc ? `
   <div class="orb o3"></div>
 
   <div class="shell">
-    ${allowToggle ? `<button class="mode-btn" id="modeBtn" onclick="toggleMode()" aria-label="Toggle light/dark mode">${primaryTheme === 'light' ? '☀️' : '🌙'}</button>` : '<div style="height:16px"></div>'}
+    <div style="height:12px"></div>
 
     <div class="glass">
 
@@ -719,7 +741,10 @@ ${isKfc ? `
           </div>
         </div>
 
-        <div class="sl">Quick tags</div>
+        <div class="sl">
+          <span>Quick tags</span>
+          <span style="font-size:10px;font-weight:500;opacity:0.6;letter-spacing:0">Tap topics to include</span>
+        </div>
         <div class="tags" id="tags"></div>
 
         <div class="acts">
@@ -875,14 +900,16 @@ function renderTags() {
   if (!el) return;
   el.innerHTML = '';
   CURRENT_TAGS.forEach((t) => {
+    const label = t.l || t.label || String(t);
     const b = document.createElement('button');
-    const isSelected = activeTags.has(t.l);
+    const isSelected = activeTags.has(label);
     b.className = 'tag' + (isSelected ? ' on' : '');
-    b.textContent = t.l;
-    b.onclick = () => toggleTag(t.l);
+    b.textContent = label;
+    b.onclick = () => toggleTag(label);
     el.appendChild(b);
   });
 }
+
 
 function updateButtonProgression() {
   const ta = document.getElementById('ta');
@@ -1018,9 +1045,8 @@ function updateMirror() {
   const hint = document.getElementById('tabHint');
   if (!ta || !mirror) return;
   const v = ta.value;
-  if (sugg && v && v.trim().length > 0) {
-    const prefix = (!v.endsWith(' ') && !sugg.startsWith(' ')) ? ' ' : '';
-    mirror.innerHTML = '<span class="typed">' + esc(v) + '</span><span class="sugg">' + esc(prefix + sugg.trim()) + '</span>';
+  if (sugg && v && v.length > 0) {
+    mirror.innerHTML = '<span class="typed">' + esc(v) + '</span><span class="sugg">' + esc(sugg) + '</span>';
     if (hint) {
       hint.style.display = 'inline-flex';
       const previewText = sugg.trim().length > 24 ? sugg.trim().slice(0, 22) + '…' : sugg.trim();
@@ -1038,7 +1064,7 @@ function onTA() {
   const v = ta.value;
   syncScroll();
   updateButtonProgression();
-  if (!v || v.trim().length === 0) {
+  if (!v || v.length === 0) {
     clrS();
     return;
   }
@@ -1054,20 +1080,18 @@ function onTA() {
     .then(data => {
       if (data.ok && data.suggestion) {
         const prim = typeof data.suggestion === 'string' ? data.suggestion : data.suggestion.primary;
-        sugg = (prim || '').trim();
+        sugg = (prim != null) ? prim : '';
         updateMirror();
       }
     })
     .catch(() => {});
-  }, 50);
+  }, 40);
 }
 
 function acceptSuggestion() {
   if (sugg) {
     const ta = document.getElementById('ta');
-    const cleanAdd = sugg.trim();
-    const needsSpace = ta.value.length > 0 && !ta.value.endsWith(' ') && !cleanAdd.startsWith(' ');
-    ta.value += (needsSpace ? ' ' : '') + cleanAdd + ' ';
+    ta.value += sugg;
     clrS();
     syncScroll();
     updateButtonProgression();

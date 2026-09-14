@@ -575,8 +575,18 @@ async function generateTagsWithGemini({ rating = 5, businessName, businessType, 
     }
   }
 
+  const sentimentGuidance = r === 5
+    ? '5-star glowing praise, top signature dishes, fast service, cleanliness'
+    : r === 4
+    ? '4-star positive, good food, friendly staff, fair value'
+    : r === 3
+    ? '3-star neutral/average experience (e.g. ⏳ Average Wait Time, 🍗 Decent Taste, ⚡ Normal Service, 💰 Fair Price)'
+    : r === 2
+    ? '2-star constructive issues (e.g. ⏳ Delayed Order, 🍗 Greasy Food, ⚡ Slow Service, ⚠️ Inattentive Staff)'
+    : '1-star critical complaints (e.g. ❌ Disappointing Taste, ⏳ Long Delay, ❄️ Food Served Cold, ⚡ Unresponsive Staff, 🧼 Poor Hygiene)';
+
   const prompt = `${uniqueSeed()}
-Generate ${limit} quick review topic tags for ${businessName || 'a local business'} (${businessType || category || 'restaurant'}), ${r} stars rating.${learnedContext}
+Generate ${limit} quick review topic tags for ${businessName || 'a local business'} (${businessType || category || 'restaurant'}), ${r} stars rating (${sentimentGuidance}).${learnedContext}
 Output JSON array with "l" key only.`;
 
   const raw = await callGemini(prompt, {
