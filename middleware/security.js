@@ -1,16 +1,16 @@
-// Production Security Middleware: Headers & Rate Limiting
+// Production Security Middleware: Headers, CSRF & Rate Limiting
 
 const rateLimits = new Map();
 
-// Lightweight in-memory rate limiter (compatible with serverless / local / multi-tenant)
+// Adaptive in-memory rate limiter
 function createRateLimiter(options = {}) {
-  const windowMs = options.windowMs || 60 * 1000; // 1 minute
-  const max = options.max || 60; // 60 requests per window
-  const message = options.message || { error: 'Too many requests, please try again later.' };
+  const windowMs = options.windowMs || 60 * 1000;
+  const max = options.max || 60;
+  const message = options.message || { ok: false, error: 'Too many requests, please try again later.' };
 
   return function rateLimiter(req, res, next) {
-    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
-    const key = `${req.baseUrl || req.path}:${ip}`;
+    const rawIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+    const key = `${req.baseUrl || ''}:${req.path}:${rawIp}`;
     const now = Date.now();
 
     let record = rateLimits.get(key);
@@ -21,7 +21,7 @@ function createRateLimiter(options = {}) {
       record.count += 1;
     }
 
-    // Clean up old entries periodically
+    // Periodic map sweep
     if (rateLimits.size > 5000) {
       for (const [k, v] of rateLimits.entries()) {
         if (now - v.startTime > windowMs) rateLimits.delete(k);
@@ -30,32 +30,59 @@ function createRateLimiter(options = {}) {
 
     if (record.count > max) {
       res.setHeader('Retry-After', Math.ceil((record.startTime + windowMs - now) / 1000));
-      return res.status(429).json(typeof message === 'string' ? { error: message } : message);
+      return res.status(429).json(typeof message === 'string' ? { ok: false, error: message } : message);
     }
 
     next();
   };
 }
 
+// CSRF Origin & Referer Verification for mutating admin POST requests
+function verifyAdminCsrf(req, res, next) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+
+  const origin = req.headers['origin'];
+  const referer = req.headers['referer'];
+  const host = req.headers['host'];
+
+  if (origin) {
+    try {
+      const originUrl = new URL(origin);
+      if (originUrl.host === host) return next();
+    } catch (e) {}
+  }
+
+  if (referer) {
+    try {
+      const refererUrl = new URL(referer);
+      if (refererUrl.host === host) return next();
+    } catch (e) {}
+  }
+
+  // If both origin and referer are absent on POST or mismatched:
+  if (!origin && !referer) {
+    return next(); // Permit direct client/curl or internal redirects
+  }
+
+  return res.status(403).json({ ok: false, error: 'Cross-site request blocked (CSRF validation failed)' });
+}
+
 // Security Headers Middleware
 function securityHeaders(req, res, next) {
-  // Prevent MIME type sniffing
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  // Clickjacking protection
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  // Referrer policy for privacy & security
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  // Disable dangerous browser permissions
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
-  // XSS protection legacy header
   res.setHeader('X-XSS-Protection', '1; mode=block');
 
-  // HSTS in production
-  if (process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https') {
+  const isProd = process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https';
+  if (isProd) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   }
 
-  // Content Security Policy
+  // Permissive enough for external Google Fonts, CDN icon fonts, Chart.js, QRCode, but strictly protects self
   res.setHeader(
     'Content-Security-Policy',
     "default-src 'self'; " +
@@ -72,7 +99,9 @@ function securityHeaders(req, res, next) {
 
 module.exports = {
   securityHeaders,
+  verifyAdminCsrf,
   createRateLimiter,
-  loginLimiter: createRateLimiter({ windowMs: 15 * 60 * 1000, max: 15, message: { error: 'Too many login attempts. Please try again in 15 minutes.' } }),
-  aiLimiter: createRateLimiter({ windowMs: 60 * 1000, max: 60, message: { error: 'AI generation limit reached for this minute. Please wait a moment.' } })
+  loginLimiter: createRateLimiter({ windowMs: 15 * 60 * 1000, max: 15, message: { ok: false, error: 'Too many login attempts. Please wait 15 minutes.' } }),
+  aiLimiter: createRateLimiter({ windowMs: 60 * 1000, max: 60, message: { ok: false, error: 'AI limit reached for this minute. Please wait a moment.' } }),
+  publicReviewLimiter: createRateLimiter({ windowMs: 60 * 1000, max: 120, message: { ok: false, error: 'Too many requests. Please slow down.' } })
 };

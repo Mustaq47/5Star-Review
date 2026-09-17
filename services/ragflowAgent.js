@@ -824,18 +824,38 @@ async function getTagsForRating(rating = 5, limit = 8, client = null) {
     return cached.tags;
   }
 
+  // Fast path for 5-star rating with pre-configured client tags
+  if (r === 5 && client && client.tags) {
+    try {
+      const parsed = JSON.parse(client.tags);
+      if (Array.isArray(parsed) && parsed.length >= 5) {
+        const final5 = parsed.slice(0, targetLimit);
+        dynamicTagsCache.set(cacheKey, { time: Date.now(), tags: final5 });
+        return final5;
+      }
+    } catch (e) {}
+  }
+
   let resultTags = [];
+
+  // Helper with fast timeout for AI tags to prevent page load stalling
+  const fastAiTimeout = (promise, ms = 3000) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('AI tag timeout')), ms))
+    ]);
+  };
 
   // 1. Try Gemini AI Brain with rating-calibrated prompt
   if (isGeminiAvailable() && client) {
     try {
-      const tags = await generateTagsWithGemini({
+      const tags = await fastAiTimeout(generateTagsWithGemini({
         rating: r,
         businessName: bizName,
         businessType: bizType,
         category: bizType,
         limit: targetLimit,
-      });
+      }), 3000);
       if (tags && tags.length >= 5) {
         dynamicTagsCache.set(cacheKey, { time: Date.now(), tags });
         return tags;
@@ -843,7 +863,7 @@ async function getTagsForRating(rating = 5, limit = 8, client = null) {
         resultTags = tags;
       }
     } catch (e) {
-      console.warn('[getTagsForRating] Gemini tags failed:', e.message);
+      console.warn('[getTagsForRating] Gemini tags skipped/timed out:', e.message);
     }
   }
 

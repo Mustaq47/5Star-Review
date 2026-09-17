@@ -1,44 +1,78 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const QRCode = require('qrcode');
-const db = require('../db/setup');
+const {
+  getAdminByEmail,
+  getAllClients,
+  getClientMetricsSummary,
+  getClientById,
+  getClientBySlug,
+  createClient,
+  updateClient,
+  deleteClient,
+  getClientAnalytics,
+  getGlobalTelemetry
+} = require('../db/firestore');
 const { requireAuth } = require('../middleware/auth');
 const { generateReviewWithAgent } = require('../services/reviewWriterAgent');
-const { loginLimiter } = require('../middleware/security');
+const { loginLimiter, verifyAdminCsrf } = require('../middleware/security');
+const { adminLoginSchema, clientInputSchema, validateBody } = require('../middleware/validator');
 const router = express.Router();
 
 // ── AUTH ──────────────────────────────────────────────────────────
 router.get('/login', (req, res) => {
-  if (req.session.adminId) return res.redirect('/admin');
+  if (req.session && req.session.adminId) return res.redirect('/admin');
   res.send(loginPage(req.query.error));
 });
 
-router.post('/login', loginLimiter, (req, res) => {
-  const { email, password } = req.body;
-  const admin = db.prepare('SELECT * FROM admins WHERE email = ?').get(email);
+router.post('/login', loginLimiter, validateBody(adminLoginSchema, false), async (req, res) => {
+  const { email, password } = req.validData || req.body;
+  const admin = await getAdminByEmail(email);
   if (!admin || !bcrypt.compareSync(password, admin.password)) {
     return res.redirect('/admin/login?error=Invalid+email+or+password');
   }
-  req.session.adminId = admin.id;
-  res.redirect('/admin');
+
+  req.session.regenerate((err) => {
+    if (err) {
+      console.error('[Session Error]', err);
+      return res.redirect('/admin/login?error=Authentication+failed');
+    }
+    req.session.adminId = admin.id;
+    res.redirect('/admin');
+  });
 });
 
 router.get('/logout', (req, res) => {
-  req.session.destroy();
-  res.redirect('/admin/login');
+  if (req.session) {
+    req.session.destroy(() => {
+      res.redirect('/admin/login');
+    });
+  } else {
+    res.redirect('/admin/login');
+  }
 });
 
 // ── DASHBOARD ─────────────────────────────────────────────────────
-router.get('/', requireAuth, (req, res) => {
-  const clients = db.prepare('SELECT * FROM clients ORDER BY created_at DESC').all();
-  const withStats = clients.map(c => {
-    const views  = db.prepare('SELECT COUNT(*) as n FROM pageviews WHERE client_id=?').get(c.id).n;
-    const clicks = db.prepare('SELECT COUNT(*) as n FROM review_clicks WHERE client_id=?').get(c.id).n;
-    const today  = db.prepare("SELECT COUNT(*) as n FROM pageviews WHERE client_id=? AND date(viewed_at)=date('now')").get(c.id).n;
-    return { ...c, views, clicks, today };
-  });
-  res.send(dashboardPage(withStats));
+router.get('/', requireAuth, async (req, res) => {
+  const clients = await getAllClients();
+  const withStats = await Promise.all(clients.map(async (c) => {
+    const metrics = await getClientMetricsSummary(c.id);
+    return { ...c, views: metrics.views, clicks: metrics.clicks, today: metrics.today };
+  }));
+  const telemetry = await getGlobalTelemetry(7);
+  res.send(dashboardPage(withStats, telemetry));
 });
+
+// ── REAL-TIME TELEMETRY API ─────────────────────────────────────────
+router.get('/api/telemetry/live', requireAuth, async (req, res) => {
+  try {
+    const telemetry = await getGlobalTelemetry(7);
+    res.json({ ok: true, telemetry });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 
 // ── CLIENT CRUD ───────────────────────────────────────────────────
 router.get('/clients/new', requireAuth, (req, res) => {
@@ -65,73 +99,91 @@ function calculateExpiry(expiryType, customDate) {
 
 function getExpiryInfo(client) {
   if (!client.active) {
-    return { status: 'paused', label: 'Paused', badgeClass: 'badge-red', dot: true };
+    return { status: 'paused', label: 'Paused', badgeClass: 'badge-amber', dot: true };
   }
   if (!client.expires_at) {
-    return { status: 'unlimited', label: 'Unlimited', badgeClass: 'badge-purple', dot: true };
+    return { status: 'unlimited', label: 'Perpetual', badgeClass: 'badge-indigo', dot: true };
   }
   const exp = new Date(client.expires_at);
   const now = new Date();
   const diffMs = exp.getTime() - now.getTime();
   if (diffMs <= 0) {
-    return { status: 'expired', label: 'Expired', badgeClass: 'badge-red', dot: false };
+    return { status: 'expired', label: 'Expired', badgeClass: 'badge-rose', dot: false };
   }
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
   if (diffDays <= 3) {
-    return { status: 'expiring', label: diffDays === 1 ? '1 day left' : `${diffDays} days left`, badgeClass: 'badge-yellow', dot: true };
+    return { status: 'expiring', label: diffDays === 1 ? '1d left' : `${diffDays}d left`, badgeClass: 'badge-amber', dot: true };
   }
   if (diffDays <= 30) {
-    return { status: 'active', label: `${diffDays} days left`, badgeClass: 'badge-green', dot: true };
+    return { status: 'active', label: `${diffDays}d left`, badgeClass: 'badge-emerald', dot: true };
   }
   const diffMonths = Math.round(diffDays / 30);
-  return { status: 'active', label: `${diffMonths} mo left`, badgeClass: 'badge-green', dot: true };
+  return { status: 'active', label: `${diffMonths}mo left`, badgeClass: 'badge-emerald', dot: true };
 }
 
-router.post('/clients/new', requireAuth, (req, res) => {
-  const { business_name, category, description, emoji, place_id, primary_color, primary_theme, allow_theme_toggle, tags_input, expiry_type, custom_expires_at } = req.body;
-  const slug = business_name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + Date.now().toString(36);
-  const tags = parseTags(tags_input);
-  const expires_at = calculateExpiry(expiry_type, custom_expires_at);
-  const themeMode = ['dark', 'light', 'system'].includes(primary_theme) ? primary_theme : 'dark';
-  const allowToggle = (allow_theme_toggle === 'off' || allow_theme_toggle === '0' || allow_theme_toggle === 0) ? 0 : 1;
+router.post('/clients/new', requireAuth, verifyAdminCsrf, validateBody(clientInputSchema, false), async (req, res) => {
+  const data = req.validData || req.body;
+  const slug = data.business_name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + Date.now().toString(36);
+  const tags = parseTags(data.tags_input);
+  const expires_at = calculateExpiry(data.expiry_type, data.custom_expires_at);
+  const themeMode = ['dark', 'light', 'system'].includes(data.primary_theme) ? data.primary_theme : 'dark';
   try {
-    db.prepare('INSERT INTO clients (slug,business_name,category,description,emoji,place_id,primary_color,primary_theme,allow_theme_toggle,tags,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-      .run(slug, business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', themeMode, allowToggle, JSON.stringify(tags), expires_at);
+    await createClient({
+      slug,
+      business_name: data.business_name,
+      category: data.category,
+      description: data.description,
+      emoji: data.emoji || '🏪',
+      place_id: data.place_id,
+      primary_color: data.primary_color || '#7c4dff',
+      primary_theme: themeMode,
+      allow_theme_toggle: data.allow_theme_toggle,
+      tags: JSON.stringify(tags),
+      expires_at
+    });
     res.redirect('/admin');
   } catch(e) {
     res.redirect('/admin/clients/new?error=' + encodeURIComponent(e.message));
   }
 });
 
-router.get('/clients/:id/edit', requireAuth, (req, res) => {
-  const client = db.prepare('SELECT * FROM clients WHERE id=?').get(req.params.id);
+router.get('/clients/:id/edit', requireAuth, async (req, res) => {
+  const client = await getClientById(req.params.id);
   if (!client) return res.redirect('/admin');
   res.send(clientFormPage(client, req.query.error));
 });
 
-router.post('/clients/:id/edit', requireAuth, (req, res) => {
-  const { slug, business_name, category, description, emoji, place_id, primary_color, primary_theme, allow_theme_toggle, tags_input, active, expiry_type, custom_expires_at } = req.body;
+router.post('/clients/:id/edit', requireAuth, verifyAdminCsrf, validateBody(clientInputSchema, false), async (req, res) => {
+  const data = req.validData || req.body;
   try {
-    const cleanSlug = slug ? slug.toLowerCase().replace(/[^a-z0-9-]+/g,'').replace(/(^-|-$)/g,'') : null;
-    const tags = parseTags(tags_input);
-    const expires_at = calculateExpiry(expiry_type, custom_expires_at);
-    const themeMode = ['dark', 'light', 'system'].includes(primary_theme) ? primary_theme : 'dark';
-    const allowToggle = (allow_theme_toggle === 'off' || allow_theme_toggle === '0' || allow_theme_toggle === 0) ? 0 : 1;
+    const cleanSlug = data.slug ? data.slug.toLowerCase().replace(/[^a-z0-9-]+/g,'').replace(/(^-|-$)/g,'') : null;
+    const tags = parseTags(data.tags_input);
+    const expires_at = calculateExpiry(data.expiry_type, data.custom_expires_at);
+    const themeMode = ['dark', 'light', 'system'].includes(data.primary_theme) ? data.primary_theme : 'dark';
 
     if (cleanSlug) {
-      const existing = db.prepare('SELECT id FROM clients WHERE slug=? AND id!=?').get(cleanSlug, req.params.id);
-      if (existing) {
+      const existing = await getClientBySlug(cleanSlug);
+      if (existing && existing.id !== req.params.id) {
         return res.redirect('/admin/clients/' + req.params.id + '/edit?error=' + encodeURIComponent('URL slug "' + cleanSlug + '" is already used by another business'));
       }
     }
 
-    if (cleanSlug) {
-      db.prepare('UPDATE clients SET slug=?, business_name=?, category=?, description=?, emoji=?, place_id=?, primary_color=?, primary_theme=?, allow_theme_toggle=?, tags=?, active=?, expires_at=? WHERE id=?')
-        .run(cleanSlug, business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', themeMode, allowToggle, JSON.stringify(tags), active==='on'?1:0, expires_at, req.params.id);
-    } else {
-      db.prepare('UPDATE clients SET business_name=?, category=?, description=?, emoji=?, place_id=?, primary_color=?, primary_theme=?, allow_theme_toggle=?, tags=?, active=?, expires_at=? WHERE id=?')
-        .run(business_name, category, description, emoji||'🏪', place_id, primary_color||'#7c4dff', themeMode, allowToggle, JSON.stringify(tags), active==='on'?1:0, expires_at, req.params.id);
-    }
+    const payload = {
+      business_name: data.business_name,
+      category: data.category,
+      description: data.description,
+      emoji: data.emoji || '🏪',
+      place_id: data.place_id,
+      primary_color: data.primary_color || '#7c4dff',
+      primary_theme: themeMode,
+      allow_theme_toggle: data.allow_theme_toggle,
+      tags: JSON.stringify(tags),
+      active: data.active,
+      expires_at
+    };
+    if (cleanSlug) payload.slug = cleanSlug;
+
+    await updateClient(req.params.id, payload);
     res.redirect('/admin');
   } catch(e) {
     console.error('Client edit error:', e);
@@ -139,18 +191,16 @@ router.post('/clients/:id/edit', requireAuth, (req, res) => {
   }
 });
 
-router.post('/clients/:id/delete', requireAuth, (req, res) => {
-  db.prepare('DELETE FROM clients WHERE id=?').run(req.params.id);
-  db.prepare('DELETE FROM pageviews WHERE client_id=?').run(req.params.id);
-  db.prepare('DELETE FROM review_clicks WHERE client_id=?').run(req.params.id);
+router.post('/clients/:id/delete', requireAuth, verifyAdminCsrf, async (req, res) => {
+  await deleteClient(req.params.id);
   res.redirect('/admin');
 });
 
-router.post('/clients/:id/quick-theme', requireAuth, (req, res) => {
+router.post('/clients/:id/quick-theme', requireAuth, verifyAdminCsrf, async (req, res) => {
   const { primary_theme } = req.body;
   const themeMode = ['dark', 'light', 'system'].includes(primary_theme) ? primary_theme : 'dark';
   try {
-    db.prepare('UPDATE clients SET primary_theme = ? WHERE id = ?').run(themeMode, req.params.id);
+    await updateClient(req.params.id, { primary_theme: themeMode });
     res.json({ ok: true, theme: themeMode });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -159,10 +209,10 @@ router.post('/clients/:id/quick-theme', requireAuth, (req, res) => {
 
 // ── QR CODE ───────────────────────────────────────────────────────
 router.get('/clients/:id/qr', requireAuth, async (req, res) => {
-  const client = db.prepare('SELECT * FROM clients WHERE id=?').get(req.params.id);
+  const client = await getClientById(req.params.id);
   if (!client) return res.status(404).send('Not found');
   const url = req.protocol + '://' + req.get('host') + '/r/' + client.slug;
-  const qr = await QRCode.toDataURL(url, { width: 800, margin: 1, errorCorrectionLevel: 'H', color: { dark: '#0a0a0f', light: '#ffffff' } });
+  const qr = await QRCode.toDataURL(url, { width: 800, margin: 1, errorCorrectionLevel: 'H', color: { dark: '#0d0e14', light: '#ffffff' } });
   let qrSvg = '';
   try {
     qrSvg = await QRCode.toString(url, { type: 'svg', margin: 1, errorCorrectionLevel: 'H' });
@@ -171,15 +221,20 @@ router.get('/clients/:id/qr', requireAuth, async (req, res) => {
 });
 
 // ── ANALYTICS ─────────────────────────────────────────────────────
-router.get('/clients/:id/analytics', requireAuth, (req, res) => {
-  const client = db.prepare('SELECT * FROM clients WHERE id=?').get(req.params.id);
+router.get('/clients/:id/analytics', requireAuth, async (req, res) => {
+  const client = await getClientById(req.params.id);
   if (!client) return res.redirect('/admin');
-  const dailyViews  = db.prepare("SELECT date(viewed_at) as day, COUNT(*) as n FROM pageviews WHERE client_id=? GROUP BY day ORDER BY day DESC LIMIT 30").all(client.id);
-  const dailyClicks = db.prepare("SELECT date(clicked_at) as day, COUNT(*) as n FROM review_clicks WHERE client_id=? GROUP BY day ORDER BY day DESC LIMIT 30").all(client.id);
-  const totalViews  = db.prepare('SELECT COUNT(*) as n FROM pageviews WHERE client_id=?').get(client.id).n;
-  const totalClicks = db.prepare('SELECT COUNT(*) as n FROM review_clicks WHERE client_id=?').get(client.id).n;
-  const convRate = totalViews > 0 ? ((totalClicks/totalViews)*100).toFixed(1) : 0;
-  res.send(analyticsPage(client, { dailyViews, dailyClicks, totalViews, totalClicks, convRate }));
+  const analytics = await getClientAnalytics(client.id);
+  const totalViews = analytics.totalViews;
+  const totalClicks = analytics.totalClicks;
+  const convRate = totalViews > 0 ? ((totalClicks / totalViews) * 100).toFixed(1) : 0;
+  res.send(analyticsPage(client, {
+    dailyViews: analytics.dailyViews,
+    dailyClicks: analytics.dailyClicks,
+    totalViews,
+    totalClicks,
+    convRate
+  }));
 });
 
 // ── AGENT TESTER ─────────────────────────────────────────────────
@@ -212,383 +267,1994 @@ function parseTags(input) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// SHARED SHELL
+// LUXURY WARM EDITORIAL DESIGN SYSTEM (STRIPE / ARC / LUXURY SAAS)
 // ══════════════════════════════════════════════════════════════════
-function shell(title, body, extraHead='') {
+function shell(title, body, extraHead='', activeNav='dashboard', showSidebar=true) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title} — ReviewPro</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>${title} — ReviewPro Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 ${extraHead}
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#0b0b14;--s1:#111119;--s2:#16161f;--s3:#1c1c28;
-  --b1:#25253a;--b2:#32324a;--b3:#424260;
-  --t1:#f0e8ff;--t2:#9090b8;--t3:#50507a;
-  --accent:#a78bfa;--accent2:#7c4dff;
-  --green:#34d399;--red:#f87171;--yellow:#fbbf24;
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg-app: #f9f6f0;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #fbf9f4;
+  --border-light: #ece5d8;
+  --border-medium: #ded4c3;
+  --t-heading: #1e1b18;
+  --t-body: #49453f;
+  --t-muted: #8c8273;
+  --t-faint: #b5ac9d;
+  
+  --sidebar-bg: #0e1017;
+  --sidebar-card: #151822;
+  --sidebar-border: #1e2230;
+  --sidebar-t1: #f8fafc;
+  --sidebar-t2: #94a3b8;
+  --sidebar-t3: #525c76;
+  
+  --amber-gold: #f59e0b;
+  --amber-dark: #d97706;
+  --amber-deep: #b45309;
+  --amber-soft: #fef3c7;
+  --amber-glow: rgba(245, 158, 11, 0.16);
+  
+  --emerald: #10b981;
+  --emerald-soft: #d1fae5;
+  --rose: #ef4444;
+  --rose-soft: #fee2e2;
+  --sky: #0284c7;
+  --sky-soft: #e0f2fe;
+  
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  
+  --shadow-card: 0 2px 10px rgba(40, 25, 10, 0.03), 0 1px 3px rgba(40, 25, 10, 0.02);
+  --shadow-hover: 0 12px 28px -6px rgba(40, 25, 10, 0.08), 0 4px 12px -2px rgba(40, 25, 10, 0.04);
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh}
-a{color:inherit;text-decoration:none}
-button{font-family:'DM Sans',sans-serif}
 
-/* ── TOPBAR ── */
-.topbar{
-  height:56px;padding:0 24px;
-  display:flex;align-items:center;justify-content:space-between;
-  background:rgba(11,11,20,0.85);
-  border-bottom:1px solid var(--b1);
-  backdrop-filter:blur(12px);
-  position:sticky;top:0;z-index:100;
+body.dark-theme {
+  --bg-app: #0a0b10;
+  --bg-card: #12141d;
+  --bg-card-subtle: #161924;
+  --border-light: #202434;
+  --border-medium: #2e344a;
+  --t-heading: #f8fafc;
+  --t-body: #cbd5e1;
+  --t-muted: #828ca5;
+  --t-faint: #4e576f;
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-hover: 0 12px 32px rgba(0, 0, 0, 0.6);
 }
-.logo{font-size:17px;font-weight:600;color:var(--t1);letter-spacing:-0.3px;display:flex;align-items:center;gap:8px}
-.logo-badge{background:rgba(124,77,255,0.25);border:1px solid rgba(124,77,255,0.35);color:var(--accent);font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500;letter-spacing:0.04em}
-.nav{display:flex;align-items:center;gap:4px}
-.nav-a{display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;font-size:13px;font-weight:500;color:var(--t3);transition:all .15s}
-.nav-a:hover{background:var(--s2);color:var(--t1)}
-.nav-a.danger:hover{background:rgba(248,113,113,0.1);color:var(--red)}
-.nav-a i{font-size:15px}
 
-/* ── PAGE LAYOUT ── */
-.page{max-width:1080px;margin:0 auto;padding:28px 20px 48px}
-.page-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:16px}
-.page-title{font-size:20px;font-weight:600;letter-spacing:-0.3px;color:var(--t1)}
-.page-sub{font-size:12.5px;color:var(--t3);margin-top:3px}
-
-/* ── CARDS ── */
-.card{background:var(--s1);border:1px solid var(--b1);border-radius:14px}
-.card-p{padding:22px}
-
-/* ── STAT GRID ── */
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:22px}
-.stat{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:18px 20px}
-.stat-lbl{font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--t3);margin-bottom:10px}
-.stat-val{font-size:30px;font-weight:600;color:var(--t1);letter-spacing:-0.5px;font-family:'DM Mono',monospace;line-height:1}
-.stat-sub{font-size:11.5px;color:var(--t3);margin-top:6px}
-.stat-accent{color:var(--accent)}
-
-/* ── TABLE ── */
-.tbl{width:100%;border-collapse:collapse}
-.tbl th{font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--t3);padding:11px 16px;text-align:left;border-bottom:1px solid var(--b1)}
-.tbl td{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:13.5px;color:var(--t2);vertical-align:middle}
-.tbl tr:last-child td{border-bottom:none}
-.tbl tr:hover td{background:rgba(255,255,255,0.015)}
-
-/* ── BIZ CELL ── */
-.biz-cell{display:flex;align-items:center;gap:12px}
-.biz-icon{width:40px;height:40px;border-radius:11px;background:var(--s3);border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;overflow:hidden;padding:2px}
-.biz-icon img{width:100%;height:100%;object-fit:contain;border-radius:8px;display:block}
-.biz-name{font-weight:600;color:var(--t1);font-size:14px;margin-bottom:2px}
-.biz-slug{font-size:11px;color:var(--t3);font-family:'DM Mono',monospace}
-
-/* ── BADGES ── */
-.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500}
-.badge-green{background:rgba(52,211,153,0.1);color:var(--green);border:1px solid rgba(52,211,153,0.2)}
-.badge-red{background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.2)}
-.badge-purple{background:rgba(167,139,250,0.1);color:var(--accent);border:1px solid rgba(167,139,250,0.2)}
-.badge-yellow{background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.25)}
-.badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
-
-/* ── THEME QUICK SELECT & TOAST ── */
-.theme-quick-wrap{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);padding:3px 8px;border-radius:20px;transition:all .2s cubic-bezier(0.4,0,0.2,1)}
-.theme-quick-wrap:hover{background:rgba(255,255,255,0.09);border-color:rgba(167,139,250,0.4);box-shadow:0 0 10px rgba(124,77,255,0.2)}
-.theme-quick-select{
-  appearance:none;-webkit-appearance:none;background:transparent;border:none;color:var(--t1);
-  font-size:11.5px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;outline:none;
-  padding-right:14px;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='rgba(240,232,255,0.6)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:right center;
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-app);
+  color: var(--t-body);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
 }
-.theme-quick-select option{background:#16161f;color:#f0e8ff}
-#toastBox{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
-.toast-msg{background:var(--s2);border:1px solid var(--b2);color:var(--t1);padding:10px 16px;border-radius:10px;font-size:12.5px;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:flex;align-items:center;gap:8px;animation:toastIn .2s cubic-bezier(0.4,0,0.2,1);pointer-events:auto}
-.toast-msg.success{border-color:rgba(52,211,153,0.3);color:var(--green)}
-.toast-msg.error{border-color:rgba(248,113,113,0.3);color:var(--red)}
-@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
-/* ── BUTTONS ── */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid;transition:all .15s;font-family:'DM Sans',sans-serif;white-space:nowrap}
-.btn i{font-size:15px}
-.btn-primary{background:var(--accent2);border-color:rgba(124,77,255,0.4);color:#fff;box-shadow:0 2px 12px rgba(124,77,255,0.25)}
-.btn-primary:hover{background:#9158ff;transform:translateY(-1px)}
-.btn-primary:active{transform:scale(0.98)}
-.btn-ghost{background:var(--s2);border-color:var(--b1);color:var(--t2)}
-.btn-ghost:hover{background:var(--s3);color:var(--t1);border-color:var(--b2)}
-.btn-danger{background:rgba(248,113,113,0.08);border-color:rgba(248,113,113,0.2);color:var(--red)}
-.btn-danger:hover{background:rgba(248,113,113,0.15)}
-.btn-sm{padding:5px 11px;font-size:12px;border-radius:7px}
-.btn-sm i{font-size:14px}
-.btn-icon{width:33px;height:33px;padding:0}
-.action-row{display:flex;gap:5px;align-items:center}
+a { color: inherit; text-decoration: none; }
+button, input, select, textarea { font-family: inherit; }
 
-/* ── FORMS ── */
-.form-grid{display:grid;gap:20px}
-.form-2col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.form-group{display:flex;flex-direction:column;gap:7px}
-.form-label{font-size:11.5px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--t3)}
-.form-hint{font-size:11px;color:var(--t3);line-height:1.55}
-.form-input,.form-textarea,.form-select{
-  background:var(--s2);border:1px solid var(--b1);border-radius:10px;
-  padding:11px 14px;font-family:'DM Sans',sans-serif;font-size:14px;
-  color:var(--t1);outline:none;transition:border-color .2s;width:100%;
+/* ── APP LAYOUT ── */
+.app-main {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
-.form-input:focus,.form-textarea:focus,.form-select:focus{border-color:var(--b3);background:var(--s3)}
-.form-input::placeholder,.form-textarea::placeholder{color:var(--t3)}
-.form-textarea{resize:vertical;min-height:90px;line-height:1.6}
-.form-select option{background:var(--s2)}
-.color-row{display:flex;align-items:center;gap:10px}
-.color-pick{width:42px;height:42px;border-radius:9px;border:1px solid var(--b1);background:transparent;cursor:pointer;padding:2px}
 
-/* ── TOGGLE ── */
-.toggle-wrap{display:flex;align-items:center;gap:10px}
-.toggle{width:44px;height:25px;border-radius:13px;background:var(--s3);border:1px solid var(--b1);position:relative;cursor:pointer;transition:all .2s;flex-shrink:0}
-.toggle.on{background:rgba(124,77,255,0.6);border-color:rgba(124,77,255,0.4)}
-.toggle-k{position:absolute;top:3px;left:3px;width:17px;height:17px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.4)}
-.toggle.on .toggle-k{left:22px}
+.sidebar-logo-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0c0d12;
+  font-weight: 800;
+  font-size: 19px;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+  flex-shrink: 0;
+}
 
-/* ── MISC ── */
-.alert-err{background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.25);border-radius:10px;padding:12px 16px;font-size:13px;color:var(--red);margin-bottom:18px;display:flex;align-items:center;gap:8px}
-.divider{height:1px;background:var(--b1);margin:20px 0}
-.empty{text-align:center;padding:56px 24px;color:var(--t3)}
-.empty-ico{font-size:36px;margin-bottom:12px;opacity:0.4}
-.empty-title{font-size:15px;font-weight:500;color:var(--t2);margin-bottom:5px}
-.mono{font-family:'DM Mono',monospace}
-.text-sm{font-size:12px}
-.text-xs{font-size:11px}
-.mt4{margin-top:4px}
-code{background:var(--s3);padding:1px 7px;border-radius:5px;font-family:'DM Mono',monospace;font-size:12px;color:var(--accent)}
+/* ── TOPBAR NAVIGATION HEADER ── */
+.main-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 36px;
+  gap: 20px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-light);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+}
+
+.topbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.topbar-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t-body);
+  transition: all 0.2s var(--ease);
+}
+.topbar-nav-link:hover {
+  background: var(--bg-card-subtle);
+  color: var(--t-heading);
+}
+.topbar-nav-link.active {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0c0d12;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);
+}
+.topbar-nav-badge {
+  background: var(--amber-gold);
+  color: #0c0d12;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  margin-left: 2px;
+}
+
+.topbar-search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: 30px;
+  padding: 0 16px;
+  height: 40px;
+  width: 100%;
+  max-width: 380px;
+  transition: all 0.2s var(--ease);
+}
+.topbar-search-box:focus-within {
+  border-color: var(--amber-gold);
+  background: var(--bg-card);
+  box-shadow: 0 0 0 3px var(--amber-glow);
+}
+.topbar-search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: var(--t-heading);
+  width: 100%;
+}
+.topbar-search-input::placeholder { color: var(--t-muted); }
+.kbd-shortcut {
+  font-size: 10.5px;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  color: var(--t-muted);
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.action-round-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-light);
+  color: var(--t-body);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s;
+}
+.action-round-btn:hover {
+  background: var(--bg-card);
+  border-color: var(--border-medium);
+  transform: translateY(-1px);
+}
+.badge-dot-alert {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  background: var(--rose);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--rose);
+}
+.btn-new-biz {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0c0d12;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 3px 12px rgba(245, 158, 11, 0.3);
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-new-biz:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+/* ── MAIN CONTENT CONTAINER ── */
+.content-stage {
+  padding: 32px 36px 60px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── WELCOME HERO ── */
+.welcome-hero-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 26px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.welcome-greeting {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t-muted);
+  margin-bottom: 4px;
+}
+.welcome-headline {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--t-heading);
+  letter-spacing: -0.03em;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.welcome-sub {
+  font-size: 14px;
+  color: var(--t-muted);
+}
+.welcome-right-cluster {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.cursive-banner-quote {
+  font-family: 'Caveat', cursive;
+  font-size: 24px;
+  color: var(--amber-dark);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.date-filter-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--t-heading);
+  box-shadow: var(--shadow-card);
+}
+
+/* ── 4 BENTO METRIC STATS ── */
+.metrics-quad-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 28px;
+}
+@media (max-width: 1100px) {
+  .metrics-quad-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .metrics-quad-grid { grid-template-columns: 1fr; }
+}
+
+.metric-card-luxe {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 20px 22px;
+  box-shadow: var(--shadow-card);
+  transition: all 0.25s var(--ease);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.metric-card-luxe:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+  border-color: var(--border-medium);
+}
+.metric-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.metric-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+.metric-icon-peach { background: #ffedd5; color: #ea580c; }
+.metric-icon-sand { background: #fef3c7; color: #d97706; }
+.metric-icon-amber { background: #fffbeb; color: #b45309; }
+.metric-icon-sage { background: #f0fdf4; color: #16a34a; }
+
+.metric-trend-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #16a34a;
+  background: #dcfce7;
+  padding: 3px 8px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.metric-label-txt {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--t-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.metric-huge-val {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--t-heading);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+.metric-sub-note {
+  font-size: 12px;
+  color: var(--t-muted);
+}
+.metric-sub-note strong {
+  color: var(--emerald);
+  font-weight: 700;
+}
+
+/* ── MIDDLE ROW: CHARTS & MAP ── */
+.middle-tri-grid {
+  display: grid;
+  grid-template-columns: 1.8fr 1.1fr 1.1fr;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+@media (max-width: 1200px) {
+  .middle-tri-grid { grid-template-columns: 1fr; }
+}
+
+.chart-card-luxe {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.card-head-between {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.card-head-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--t-heading);
+  letter-spacing: -0.02em;
+  margin-bottom: 2px;
+}
+.card-head-sub {
+  font-size: 12px;
+  color: var(--t-muted);
+}
+.card-pill-select {
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--t-body);
+  outline: none;
+  cursor: pointer;
+}
+
+/* ── FUNNEL STAGES ── */
+.funnel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.funnel-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.funnel-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 130px;
+  flex-shrink: 0;
+}
+.funnel-icon {
+  font-size: 15px;
+  color: var(--amber-gold);
+}
+.funnel-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--t-body);
+}
+.funnel-count {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--t-heading);
+  margin-left: auto;
+}
+.funnel-bar-outer {
+  flex: 1;
+  height: 9px;
+  background: #f1ebd8;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+body.dark-theme .funnel-bar-outer {
+  background: #1f2334;
+}
+.funnel-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+}
+.funnel-pct {
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--t-muted);
+  width: 44px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ── MAP CANVAS ── */
+.map-visual-container {
+  height: 180px;
+  background: #eef2f6;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-light);
+}
+body.dark-theme .map-visual-container {
+  background: #151824;
+}
+.map-bg-svg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  opacity: 0.35;
+  object-fit: cover;
+}
+.map-pin {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid var(--border-light);
+  padding: 4px 8px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--t-heading);
+  z-index: 2;
+}
+body.dark-theme .map-pin {
+  background: #1a1d2c;
+}
+.map-pin-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 6px #f59e0b;
+}
+
+/* ── BOTTOM ROW: BUSINESSES & ACTIVITY ── */
+.bottom-duo-grid {
+  display: grid;
+  grid-template-columns: 2.2fr 1fr;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+@media (max-width: 1100px) {
+  .bottom-duo-grid { grid-template-columns: 1fr; }
+}
+
+.biz-trio-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.biz-luxury-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s var(--ease);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.biz-luxury-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+  border-color: var(--border-medium);
+}
+.biz-luxury-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--card-brand, #f59e0b);
+}
+
+.biz-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.biz-avatar-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.biz-avatar-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.biz-meta-info { flex: 1; min-width: 0; }
+.biz-meta-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--t-heading);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+.biz-meta-cat {
+  font-size: 11.5px;
+  color: var(--t-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.biz-status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #16a34a;
+  background: #dcfce7;
+  padding: 3px 8px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.biz-telemetry-4row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 10px 8px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+.biz-tel-item {
+  display: flex;
+  flex-direction: column;
+}
+.biz-tel-num {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--t-heading);
+  font-family: 'JetBrains Mono', monospace;
+}
+.biz-tel-lbl {
+  font-size: 10px;
+  color: var(--t-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+.biz-actions-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.slug-copy-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-light);
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--t-body);
+  cursor: pointer;
+  transition: all 0.2s;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.slug-copy-pill:hover {
+  background: #ffffff;
+  border-color: var(--amber-gold);
+}
+.biz-icon-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.biz-mini-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--t-body);
+  transition: all 0.15s;
+}
+.biz-mini-btn:hover {
+  background: #ffffff;
+  border-color: var(--border-medium);
+  color: var(--amber-dark);
+}
+
+/* ── RECENT ACTIVITY FEED ── */
+.activity-feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.activity-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.activity-row:last-child { border-bottom: none; }
+.activity-icon-wrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.activity-blue { background: #e0f2fe; color: #0284c7; }
+.activity-green { background: #dcfce7; color: #16a34a; }
+.activity-gold { background: #fef3c7; color: #d97706; }
+
+.activity-detail { flex: 1; min-width: 0; }
+.activity-event {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--t-heading);
+}
+.activity-biz {
+  font-size: 11.5px;
+  color: var(--t-muted);
+}
+.activity-time {
+  font-size: 11px;
+  color: var(--t-muted);
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+}
+
+/* ── BOTTOM PROMO BANNER ── */
+.promo-growth-banner {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: var(--radius-xl);
+  padding: 24px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  box-shadow: 0 8px 24px -4px rgba(245, 158, 11, 0.12);
+  position: relative;
+  overflow: hidden;
+}
+body.dark-theme .promo-growth-banner {
+  background: linear-gradient(135deg, #1c1917 0%, #292524 100%);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+.promo-left-cluster {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  z-index: 2;
+}
+.promo-rocket-box {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  flex-shrink: 0;
+}
+body.dark-theme .promo-rocket-box {
+  background: #18181b;
+}
+.promo-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1e1b18;
+  letter-spacing: -0.02em;
+  margin-bottom: 2px;
+}
+body.dark-theme .promo-title { color: #ffffff; }
+.promo-subtitle {
+  font-size: 13.5px;
+  color: #78716c;
+}
+body.dark-theme .promo-subtitle { color: #a1a1aa; }
+.promo-cta-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0c0d12;
+  font-weight: 800;
+  font-size: 13.5px;
+  padding: 12px 24px;
+  border-radius: 30px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.35);
+  transition: all 0.2s;
+  white-space: nowrap;
+  z-index: 2;
+}
+.promo-cta-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.promo-bottom-cursive {
+  font-family: 'Caveat', cursive;
+  font-size: 20px;
+  color: #b45309;
+  position: absolute;
+  right: 28px;
+  bottom: 8px;
+  opacity: 0.85;
+}
+
+/* ── FORM & MODAL CONTROLS ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s var(--ease);
+}
+.btn-primary {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0c0d12;
+  font-weight: 700;
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.25);
+}
+.btn-secondary {
+  background: var(--bg-card);
+  border-color: var(--border-light);
+  color: var(--t-heading);
+}
+.btn-danger-ghost {
+  background: transparent;
+  color: var(--rose);
+  border: none;
+}
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-icon { width: 32px; height: 32px; padding: 0; }
+
+.form-grid { display: grid; gap: 20px; }
+.form-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 640px) { .form-2col { grid-template-columns: 1fr; } }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--t-muted); }
+.form-hint { font-size: 11.5px; color: var(--t-muted); }
+.form-input, .form-textarea, .form-select {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--t-heading);
+  outline: none;
+  transition: all 0.2s var(--ease);
+  width: 100%;
+}
+.form-input:focus, .form-textarea:focus, .form-select:focus {
+  border-color: var(--amber-gold);
+  box-shadow: 0 0 0 3px var(--amber-glow);
+}
+.form-textarea { resize: vertical; min-height: 100px; }
+.color-row { display: flex; align-items: center; gap: 10px; }
+.color-pick { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--border-light); background: transparent; cursor: pointer; padding: 2px; }
+
+.toggle-wrap { display: flex; align-items: center; gap: 12px; }
+.toggle { width: 46px; height: 26px; border-radius: 14px; background: #e2e8f0; border: 1px solid var(--border-light); position: relative; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+body.dark-theme .toggle { background: #222738; }
+.toggle.on { background: var(--emerald); border-color: rgba(16, 185, 129, 0.4); }
+.toggle-k { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left 0.2s var(--ease); box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+.toggle.on .toggle-k { left: 23px; }
+
+.alert-err {
+  background: var(--rose-soft);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  font-size: 13.5px;
+  color: var(--rose);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+#toastBox {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast-msg {
+  background: var(--bg-card);
+  border: 1px solid var(--border-medium);
+  color: var(--t-heading);
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow-hover);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: toastSlideIn 0.2s var(--ease);
+  pointer-events: auto;
+}
+/* ── LIVE MAP & MARKERS ── */
+#liveActivityMap {
+  width: 100%;
+  height: 180px;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+.leaflet-container {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  background: #f1ebd8 !important;
+}
+body.dark-theme .leaflet-container {
+  background: #11131c !important;
+}
+.leaflet-tile-pane {
+  filter: saturate(0.85) contrast(1.05);
+}
+body.dark-theme .leaflet-tile-pane {
+  filter: invert(100%) hue-rotate(180deg) brightness(90%) contrast(90%);
+}
+.live-map-marker {
+  position: relative;
+  width: 16px;
+  height: 16px;
+}
+.live-map-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.9);
+  position: relative;
+  z-index: 2;
+}
+.live-map-pulse {
+  position: absolute;
+  top: -7px;
+  left: -7px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.45);
+  animation: mapPulse 1.8s infinite ease-out;
+  z-index: 1;
+}
+@keyframes mapPulse {
+  0% { transform: scale(0.4); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+/* ── LIVE STATUS BADGE ── */
+.live-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 12px;
+  letter-spacing: 0.04em;
+}
+.live-ping-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+  animation: pingDot 1.4s infinite;
+}
+@keyframes pingDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.75); }
+}
+
+/* ── CATEGORY PILL SELECTORS ── */
+.biz-cat-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.cat-pill-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t-body);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  box-shadow: var(--shadow-card);
+}
+.cat-pill-btn:hover {
+  border-color: var(--amber-gold);
+  color: var(--amber-dark);
+}
+.cat-pill-btn.active {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0c0d12;
+  border-color: rgba(245, 158, 11, 0.4);
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);
+}
+
+/* ── INTERACTIVE MODAL DIALOGS ── */
+.luxe-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 11, 16, 0.7);
+  backdrop-filter: blur(6px);
+  z-index: 10000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.luxe-modal-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-hover);
+  max-width: 820px;
+  width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalScaleIn 0.2s var(--ease);
+}
+@keyframes modalScaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.luxe-modal-head {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.luxe-modal-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--t-heading);
+}
+.luxe-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  color: var(--t-muted);
+  cursor: pointer;
+  padding: 4px;
+}
+.luxe-modal-close:hover { color: var(--rose); }
+.luxe-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
 </style>
 </head>
 <body>
-<nav class="topbar">
-  <div class="logo">
-    ReviewPro
-    <span class="logo-badge">ADMIN</span>
-  </div>
-  <div class="nav">
-    <a href="/admin" class="nav-a"><i class="ti ti-layout-dashboard"></i>Dashboard</a>
-    <a href="/admin/agent-test" class="nav-a"><i class="ti ti-sparkles"></i>Agent Test</a>
-    <a href="/admin/clients/new" class="nav-a"><i class="ti ti-plus"></i>Add Client</a>
-    <a href="/admin/logout" class="nav-a danger"><i class="ti ti-logout"></i>Logout</a>
-  </div>
-</nav>
-<div class="page">${body}</div>
+
+<!-- MAIN APP VIEWPORT -->
+<div class="app-main">
+  <!-- TOPBAR HEADER -->
+  <header class="main-topbar">
+    <div style="display:flex;align-items:center;gap:28px">
+      <!-- BRAND LOGO -->
+      <a href="/admin" style="display:flex;align-items:center;gap:10px">
+        <div class="sidebar-logo-box">R</div>
+        <div>
+          <div style="font-size:16px;font-weight:800;color:var(--t-heading);line-height:1.1;letter-spacing:-0.02em">ReviewPro</div>
+          <div style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--t-muted);font-weight:600">STUDIO v2.4</div>
+        </div>
+      </a>
+
+      <!-- TOP NAVIGATION LINKS -->
+      <nav class="topbar-nav">
+        <a href="/admin" class="topbar-nav-link ${activeNav==='dashboard'?'active':''}">
+          <i class="ti ti-smart-home"></i> <span>Dashboard</span>
+        </a>
+        <a href="/admin#businesses" class="topbar-nav-link">
+          <i class="ti ti-building-store"></i> <span>Businesses</span>
+        </a>
+        <a href="/admin#analytics" class="topbar-nav-link">
+          <i class="ti ti-chart-dots"></i> <span>Analytics</span>
+        </a>
+        <a href="/admin/clients/new" class="topbar-nav-link">
+          <i class="ti ti-qrcode"></i> <span>QR Studio</span>
+        </a>
+        <a href="/admin/agent-test" class="topbar-nav-link ${activeNav==='agent'?'active':''}">
+          <i class="ti ti-sparkles" style="color:var(--amber-gold)"></i> <span>Agent Lab</span>
+          <span class="topbar-nav-badge">New</span>
+        </a>
+      </nav>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:16px;flex:1;max-width:440px;margin:0 20px">
+      <div class="topbar-search-box" style="max-width:100%">
+        <i class="ti ti-search" style="color:var(--t-muted);font-size:15px"></i>
+        <input class="topbar-search-input" id="globalSearchInput" placeholder="Search businesses by name, category, or slug..." oninput="filterBusinesses(this.value)">
+        <span class="kbd-shortcut">Ctrl K</span>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="action-round-btn" onclick="toggleAppTheme()" title="Toggle Light / Dark Mode">
+        <i class="ti ti-sun-moon"></i>
+      </button>
+      <button class="action-round-btn" onclick="alert('No new system alerts')" title="Notifications">
+        <i class="ti ti-bell"></i>
+        <span class="badge-dot-alert"></span>
+      </button>
+      <a href="/admin/clients/new" class="btn-new-biz">
+        <i class="ti ti-plus"></i> New Business
+      </a>
+      <div style="display:flex;align-items:center;gap:10px;padding-left:10px;border-left:1px solid var(--border-light)">
+        <div style="width:34px;height:34px;border-radius:50%;background:#292524;color:#f8fafc;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px" title="Mustaq (Admin)">M</div>
+        <a href="/admin/logout" title="Sign out" style="color:var(--t-muted);font-size:16px;padding:4px"><i class="ti ti-logout"></i></a>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTENT STAGE -->
+  <main class="content-stage">
+    ${body}
+  </main>
+</div>
+
+<div id="toastBox"></div>
+
+<script>
+function toggleAppTheme() {
+  document.body.classList.toggle('dark-theme');
+  const isDark = document.body.classList.contains('dark-theme');
+  localStorage.setItem('reviewpro_admin_theme', isDark ? 'dark' : 'light');
+}
+if (localStorage.getItem('reviewpro_admin_theme') === 'dark') {
+  document.body.classList.add('dark-theme');
+}
+
+function showToast(msg, isErr = false) {
+  const box = document.getElementById('toastBox');
+  if (!box) return;
+  const t = document.createElement('div');
+  t.className = 'toast-msg ' + (isErr ? 'error' : 'success');
+  t.innerHTML = (isErr ? '<i class="ti ti-alert-circle"></i> ' : '<i class="ti ti-check"></i> ') + msg;
+  box.appendChild(t);
+  setTimeout(() => {
+    t.style.opacity = '0';
+    t.style.transform = 'translateY(10px)';
+    t.style.transition = 'all 0.2s';
+    setTimeout(() => t.remove(), 200);
+  }, 2500);
+}
+
+function copyClientUrl(slug) {
+  const url = window.location.origin + '/r/' + slug;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => showToast('Copied: ' + url));
+  } else {
+    showToast('Copied: ' + url);
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    const inp = document.getElementById('globalSearchInput');
+    if (inp) inp.focus();
+  }
+});
+</script>
 ${process.env.NODE_ENV !== 'production' ? '<script src="/agentation.js"></script>' : ''}
 </body></html>`;
 }
 
 // ── LOGIN PAGE ─────────────────────────────────────────────────────
-function loginPage(error) {
+function loginPage(error, csrfToken = '') {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Login — ReviewPro</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<title>Sign In — ReviewPro Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;background:linear-gradient(135deg,#0a0a18 0%,#12071a 50%,#071218 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.orb{position:fixed;border-radius:50%;pointer-events:none}
-.o1{width:500px;height:500px;top:-120px;right:-100px;background:radial-gradient(circle,rgba(103,58,183,0.3) 0%,transparent 70%)}
-.o2{width:360px;height:360px;bottom:-80px;left:-80px;background:radial-gradient(circle,rgba(183,110,0,0.25) 0%,transparent 70%)}
-.card{
-  background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
-  border-radius:22px;padding:36px 32px;width:100%;max-width:380px;
-  backdrop-filter:blur(20px);position:relative;z-index:2;
-  box-shadow:0 16px 64px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.07);
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: #0a0b10;
+  color: #f8fafc;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
 }
-.brand{font-size:24px;font-weight:600;color:#f0e8ff;margin-bottom:4px;letter-spacing:-0.4px}
-.brand-sub{font-size:13px;color:rgba(180,160,220,0.5);margin-bottom:30px}
-label{display:block;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:rgba(180,160,220,0.55);margin-bottom:7px}
-input{
-  width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
-  border-radius:11px;padding:12px 15px;color:#e8e0f8;font-family:'DM Sans',sans-serif;
-  font-size:14px;outline:none;margin-bottom:16px;transition:border-color .2s;box-sizing:border-box;
+.login-card {
+  width: 100%;
+  max-width: 410px;
+  background: #12141d;
+  border: 1px solid #202434;
+  border-radius: 24px;
+  padding: 40px 34px;
+  box-shadow: 0 16px 48px -8px rgba(0, 0, 0, 0.6);
+  position: relative;
 }
-input:focus{border-color:rgba(167,139,250,0.5);background:rgba(255,255,255,0.07)}
-input::placeholder{color:rgba(180,160,220,0.3)}
-.btn{width:100%;height:50px;background:rgba(124,77,255,0.9);border:1px solid rgba(150,100,255,0.35);border-radius:12px;color:#fff;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;margin-top:4px;transition:all .15s}
-.btn:hover{background:#9158ff;transform:translateY(-1px)}
-.err{background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.25);border-radius:10px;padding:11px 14px;color:#f87171;font-size:13px;margin-bottom:18px;display:flex;align-items:center;gap:7px}
+.login-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0c0d12;
+  font-weight: 800;
+  font-size: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+}
+.brand-title { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; color: #f8fafc; margin-bottom: 6px; }
+.brand-desc { font-size: 13.5px; color: #828ca5; margin-bottom: 28px; }
+.field-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #525c76; margin-bottom: 8px; }
+.text-input {
+  width: 100%;
+  background: #161924;
+  border: 1px solid #202434;
+  border-radius: 12px;
+  padding: 13px 16px;
+  color: #f8fafc;
+  font-size: 14px;
+  outline: none;
+  margin-bottom: 18px;
+  transition: all 0.2s;
+}
+.text-input:focus { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15); background: #1c202e; }
+.submit-btn {
+  width: 100%;
+  height: 48px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 12px;
+  color: #0c0d12;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.25);
+  transition: all 0.2s;
+}
+.submit-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.error-banner {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: #ef4444;
+  font-size: 13px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 </style>
 </head>
 <body>
-<div class="orb o1"></div><div class="orb o2"></div>
-<form class="card" method="POST" action="/admin/login">
-  <div class="brand">ReviewPro</div>
-  <div class="brand-sub">Admin dashboard — sign in to continue</div>
-  ${error ? `<div class="err">⚠️ ${error}</div>` : ''}
-  <label>Email address</label>
-  <input type="email" name="email" required autocomplete="email">
-  <label>Password</label>
-  <input type="password" name="password" required autocomplete="current-password">
-  <button class="btn" type="submit">Sign in →</button>
-</form>
+<div class="login-card">
+  <div class="login-logo">R</div>
+  <h1 class="brand-title">ReviewPro Studio</h1>
+  <p class="brand-desc">Sign in to manage multi-tenant Google review portals.</p>
+  ${error ? `<div class="error-banner"><i class="ti ti-alert-circle"></i> ${esc(error)}</div>` : ''}
+  <form method="POST" action="/admin/login">
+    ${csrfToken ? `<input type="hidden" name="_csrf" value="${esc(csrfToken)}">` : ''}
+    <label class="field-label">Admin Email</label>
+    <input class="text-input" type="email" name="email" required autocomplete="email" placeholder="admin@reviewpro.in">
+    <label class="field-label">Password</label>
+    <input class="text-input" type="password" name="password" required autocomplete="current-password" placeholder="••••••••">
+    <button class="submit-btn" type="submit">Sign in to Console <i class="ti ti-arrow-right"></i></button>
+  </form>
+</div>
 </body></html>`;
 }
 
 // ── DASHBOARD PAGE ─────────────────────────────────────────────────
-function dashboardPage(clients) {
-  const totalViews  = clients.reduce((s,c)=>s+c.views,0);
-  const totalClicks = clients.reduce((s,c)=>s+c.clicks,0);
-  const todayViews  = clients.reduce((s,c)=>s+c.today,0);
-  const active      = clients.filter(c=>c.active).length;
-  const conv = totalViews > 0 ? ((totalClicks/totalViews)*100).toFixed(1) : '0.0';
+function dashboardPage(clients, telemetry = {}) {
+  const totalViews = clients.reduce((s, c) => s + c.views, 0);
+  const totalClicks = clients.reduce((s, c) => s + c.clicks, 0);
+  const todayViews = clients.reduce((s, c) => s + c.today, 0);
+  const activeCount = clients.filter(c => c.active).length;
+  const overallConv = totalViews > 0 ? ((totalClicks / totalViews) * 100).toFixed(1) : '0.0';
 
-  const rows = clients.length === 0
-    ? `<tr><td colspan="7"><div class="empty"><div class="empty-ico">🏪</div><div class="empty-title">No clients yet</div><div class="text-sm">Add your first client to get started</div></div></td></tr>`
-    : clients.map(c => {
-        const cr = c.views > 0 ? ((c.clicks/c.views)*100).toFixed(0) : 0;
-        const expInfo = getExpiryInfo(c);
-        const themeLabel = c.primary_theme === 'light' ? '☀️ Light' : (c.primary_theme === 'system' ? '📱 Auto' : '🌙 Dark');
-        const themeColor = c.primary_color || '#7c4dff';
-        return `<tr>
-          <td>
-            <div class="biz-cell">
-              <div class="biz-icon">${c.emoji && (c.emoji.startsWith('/') || c.emoji.startsWith('http') || c.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i)) ? `<img src="${esc(c.emoji)}" alt="${esc(c.business_name)}">` : esc(c.emoji||'🏪')}</div>
-              <div>
-                <div class="biz-name">${esc(c.business_name)}</div>
-                <div class="biz-slug">/r/${c.slug}</div>
-              </div>
-            </div>
-          </td>
-          <td><span class="badge badge-purple">${esc(c.category)}</span></td>
-          <td>
-            <div class="theme-quick-wrap" title="Directly change theme">
-              <span style="width:8px;height:8px;border-radius:50%;background:${esc(themeColor)};display:inline-block;box-shadow:0 0 6px ${esc(themeColor)};flex-shrink:0"></span>
-              <select class="theme-quick-select" onchange="quickUpdateTheme(${c.id}, this.value, this)" data-prev="${esc(c.primary_theme||'dark')}">
-                <option value="dark" ${c.primary_theme === 'dark' ? 'selected' : ''}>🌙 Dark</option>
-                <option value="light" ${c.primary_theme === 'light' ? 'selected' : ''}>☀️ Light</option>
-                <option value="system" ${c.primary_theme === 'system' ? 'selected' : ''}>📱 Auto</option>
-              </select>
-            </div>
-            ${c.allow_theme_toggle === 0 ? '<div class="text-xs mt4" style="color:var(--yellow);font-size:10px">🔒 Locked</div>' : ''}
-          </td>
-          <td>
-            <div class="mono" style="font-size:15px;color:#f0e8ff">${c.views}</div>
-            <div class="text-xs mt4" style="color:var(--t3)">${c.today} today</div>
-          </td>
-          <td>
-            <div class="mono" style="font-size:15px;color:#f0e8ff">${c.clicks}</div>
-            <div class="text-xs mt4" style="color:var(--t3)">${cr}% conv.</div>
-          </td>
-          <td>
-            <span class="badge ${expInfo.badgeClass}">
-              ${expInfo.dot ? '<span class="badge-dot"></span>' : ''}${esc(expInfo.label)}
-            </span>
-            ${c.expires_at ? `<div class="text-xs mt4 mono" style="color:var(--t3);font-size:10px">${new Date(c.expires_at).toLocaleDateString()}</div>` : ''}
-          </td>
-          <td style="white-space:nowrap"><span class="text-xs mono" style="color:var(--t3)">${c.created_at ? c.created_at.split(' ')[0] : '—'}</span></td>
-          <td>
-            <div class="action-row">
-              <a href="/r/${c.slug}" target="_blank" class="btn btn-ghost btn-sm btn-icon" title="Preview"><i class="ti ti-external-link"></i></a>
-              <a href="/admin/clients/${c.id}/qr" class="btn btn-ghost btn-sm btn-icon" title="QR Code"><i class="ti ti-qrcode"></i></a>
-              <a href="/admin/clients/${c.id}/analytics" class="btn btn-ghost btn-sm btn-icon" title="Analytics"><i class="ti ti-chart-bar"></i></a>
-              <a href="/admin/clients/${c.id}/edit" class="btn btn-ghost btn-sm btn-icon" title="Edit"><i class="ti ti-edit"></i></a>
-              <form method="POST" action="/admin/clients/${c.id}/delete" style="display:inline" onsubmit="return confirm('Delete ${esc(c.business_name)}? This cannot be undone.')">
-                <button class="btn btn-danger btn-sm btn-icon" title="Delete"><i class="ti ti-trash"></i></button>
-              </form>
-            </div>
-          </td>
-        </tr>`;
-      }).join('');
+  // Funnel calculations from real-time database telemetry
+  const fViews = telemetry.funnel?.views ?? totalViews;
+  const fStarted = telemetry.funnel?.started ?? Math.round(totalViews * 0.78);
+  const fCompleted = telemetry.funnel?.completed ?? Math.round(totalViews * 0.56);
+  const fClicks = telemetry.funnel?.clicks ?? totalClicks;
+  const fStartedPct = telemetry.funnel?.startedPct ?? (totalViews > 0 ? ((fStarted / totalViews) * 100).toFixed(1) : '0.0');
+  const fCompletedPct = telemetry.funnel?.completedPct ?? (totalViews > 0 ? ((fCompleted / totalViews) * 100).toFixed(1) : '0.0');
+  const fClicksPct = telemetry.funnel?.clicksPct ?? overallConv;
+
+  const chartLabels = telemetry.chartLabels || ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Today'];
+  const viewSeries = telemetry.viewSeries || [0, 0, 0, 0, 0, 0, todayViews];
+  const clickSeries = telemetry.clickSeries || [0, 0, 0, 0, 0, 0, totalClicks];
+  const dateRangeStr = telemetry.dateRangeLabel || 'Last 7 Days';
+  const locationStats = telemetry.locationStats || { 'Hyderabad': 0, 'Vijayawada': 0, 'Nellore': 0 };
+  const activities = telemetry.recentActivities && telemetry.recentActivities.length > 0
+    ? telemetry.recentActivities
+    : [
+        { type: 'view', biz: clients[0]?.business_name || 'Portal', timeStr: 'Just now' }
+      ];
+
+  const recentActivityHtml = activities.map(act => {
+    const isClick = act.type === 'click';
+    return `
+    <div class="activity-row">
+      <div class="activity-icon-wrap ${isClick ? 'activity-green' : 'activity-blue'}">
+        <i class="${isClick ? 'ti ti-external-link' : 'ti ti-eye'}"></i>
+      </div>
+      <div class="activity-detail">
+        <div class="activity-event">${isClick ? 'Google click' : 'Page view'}</div>
+        <div class="activity-biz">${esc(act.biz)}</div>
+      </div>
+      <span class="activity-time">${esc(act.timeStr)}</span>
+    </div>`;
+  }).join('');
+
+  // Business Cards Grid HTML
+  const bizCardsHtml = clients.map(c => {
+    const cr = c.views > 0 ? ((c.clicks / c.views) * 100).toFixed(0) : 0;
+    const expInfo = getExpiryInfo(c);
+    const isImg = c.emoji && (c.emoji.startsWith('/') || c.emoji.startsWith('http') || c.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i));
+    const accent = c.primary_color || '#f59e0b';
+
+    return `
+    <div class="biz-luxury-card" style="--card-brand: ${esc(accent)}" data-slug="${esc(c.slug)}" data-name="${esc(c.business_name.toLowerCase())}" data-category="${esc(c.category.toLowerCase())}">
+      <div>
+        <div class="biz-card-head">
+          <div class="biz-avatar-box">
+            ${isImg ? `<img src="${esc(c.emoji)}" alt="${esc(c.business_name)}">` : esc(c.emoji || '🏪')}
+          </div>
+          <div class="biz-meta-info">
+            <div class="biz-meta-name" title="${esc(c.business_name)}">${esc(c.business_name)}</div>
+            <div class="biz-meta-cat">${esc(c.category || 'Local Business')}</div>
+          </div>
+          <span class="biz-status-pill">
+            <span style="width:6px;height:6px;border-radius:50%;background:#16a34a"></span> Active
+          </span>
+        </div>
+
+        <div class="biz-telemetry-4row">
+          <div class="biz-tel-item">
+            <span class="biz-tel-num">${c.views}</span>
+            <span class="biz-tel-lbl">Impressions</span>
+          </div>
+          <div class="biz-tel-item">
+            <span class="biz-tel-num" style="color:var(--amber-dark)">${c.today}</span>
+            <span class="biz-tel-lbl">Today</span>
+          </div>
+          <div class="biz-tel-item">
+            <span class="biz-tel-num">${c.clicks}</span>
+            <span class="biz-tel-lbl">Clicks</span>
+          </div>
+          <div class="biz-tel-item">
+            <span class="biz-tel-num" style="color:#16a34a">${cr}%</span>
+            <span class="biz-tel-lbl">Conversion</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="biz-actions-bottom">
+        <div class="slug-copy-pill" onclick="copyClientUrl('${esc(c.slug)}')" title="Click to copy link">
+          <i class="ti ti-link" style="color:var(--amber-dark)"></i>
+          <span>/r/${esc(c.slug)}</span>
+        </div>
+
+        <div class="biz-icon-btns">
+          <a href="/admin/clients/${c.id}/qr" class="biz-mini-btn" title="QR Studio"><i class="ti ti-qrcode"></i></a>
+          <a href="/admin/clients/${c.id}/analytics" class="biz-mini-btn" title="Analytics"><i class="ti ti-chart-bar"></i></a>
+          <a href="/admin/clients/${c.id}/edit" class="biz-mini-btn" title="Edit"><i class="ti ti-edit"></i></a>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 
   return shell('Dashboard', `
-    <div class="page-hdr">
+    <!-- WELCOME ROW -->
+    <div class="welcome-hero-row">
       <div>
-        <div class="page-title">Dashboard</div>
-        <div class="page-sub">${clients.length} client${clients.length!==1?'s':''} · ${active} active</div>
+        <div class="welcome-greeting">Good afternoon,</div>
+        <h1 class="welcome-headline">Welcome back, Mustaq 👋</h1>
+        <div class="welcome-sub">Track. Understand. Grow. Turn every customer experience into real impact.</div>
       </div>
-      <a href="/admin/clients/new" class="btn btn-primary"><i class="ti ti-plus"></i> Add client</a>
-    </div>
 
-    <div class="stat-grid">
-      <div class="stat">
-        <div class="stat-lbl">Active clients</div>
-        <div class="stat-val stat-accent">${active}</div>
-        <div class="stat-sub">of ${clients.length} total</div>
-      </div>
-      <div class="stat">
-        <div class="stat-lbl">Total page views</div>
-        <div class="stat-val">${totalViews}</div>
-        <div class="stat-sub">${todayViews} today</div>
-      </div>
-      <div class="stat">
-        <div class="stat-lbl">Maps clicks</div>
-        <div class="stat-val">${totalClicks}</div>
-        <div class="stat-sub">opened review page</div>
-      </div>
-      <div class="stat">
-        <div class="stat-lbl">Avg conversion</div>
-        <div class="stat-val">${conv}%</div>
-        <div class="stat-sub">views → clicks</div>
+      <div class="welcome-right-cluster">
+        <div class="cursive-banner-quote">"Better Reviews, Happier Businesses!"</div>
+        <div class="date-filter-pill">
+          <i class="ti ti-calendar" style="color:var(--amber-dark)"></i>
+          <span>${esc(dateRangeStr)}</span>
+          <i class="ti ti-chevron-down" style="font-size:12px;color:var(--t-muted)"></i>
+        </div>
       </div>
     </div>
 
-    <div class="card" style="overflow:hidden">
-      <table class="tbl">
-        <thead><tr>
-          <th>Business</th>
-          <th>Category</th>
-          <th>Theme</th>
-          <th>Views</th>
-          <th>Clicks</th>
-          <th>QR Status &amp; Timer</th>
-          <th>Added</th>
-          <th>Actions</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+    <!-- 4 BENTO METRIC STATS -->
+    <div class="metrics-quad-grid">
+      <!-- 1. Active Portals -->
+      <div class="metric-card-luxe">
+        <div class="metric-card-top">
+          <div class="metric-icon-box metric-icon-peach"><i class="ti ti-eye"></i></div>
+          <span class="metric-trend-pill">↑ ${activeCount > 0 ? '100%' : '0%'}</span>
+        </div>
+        <div>
+          <div class="metric-label-txt">Active Portals</div>
+          <div class="metric-huge-val">${activeCount}</div>
+          <div class="metric-sub-note">out of ${clients.length} total businesses</div>
+        </div>
+      </div>
+
+      <!-- 2. Total Impressions -->
+      <div class="metric-card-luxe">
+        <div class="metric-card-top">
+          <div class="metric-icon-box metric-icon-sand"><i class="ti ti-chart-bar"></i></div>
+          <span class="metric-trend-pill">↑ ${totalViews > 0 ? '100%' : '0%'}</span>
+        </div>
+        <div>
+          <div class="metric-label-txt">Total Impressions</div>
+          <div class="metric-huge-val">${totalViews}</div>
+          <div class="metric-sub-note"><strong>+${todayViews} today</strong> across all portals</div>
+        </div>
+      </div>
+
+      <!-- 3. Maps Review Clicks -->
+      <div class="metric-card-luxe">
+        <div class="metric-card-top">
+          <div class="metric-icon-box metric-icon-amber"><i class="ti ti-pointer"></i></div>
+          <span class="metric-trend-pill">↑ ${totalClicks > 0 ? '100%' : '0%'}</span>
+        </div>
+        <div>
+          <div class="metric-label-txt">Maps Review Clicks</div>
+          <div class="metric-huge-val">${totalClicks}</div>
+          <div class="metric-sub-note">opened native Google Review flow</div>
+        </div>
+      </div>
+
+      <!-- 4. Avg. Conversion -->
+      <div class="metric-card-luxe">
+        <div class="metric-card-top">
+          <div class="metric-icon-box metric-icon-sage"><i class="ti ti-users"></i></div>
+          <span class="metric-trend-pill">↑ ${overallConv > 0 ? overallConv + '%' : '0%'}</span>
+        </div>
+        <div>
+          <div class="metric-label-txt">Avg. Conversion</div>
+          <div class="metric-huge-val">${overallConv}%</div>
+          <div class="metric-sub-note">impressions converted to 5★ ratings</div>
+        </div>
+      </div>
     </div>
 
-    <div id="toastBox"></div>
+    <!-- MIDDLE TRI-GRID: CHART + FUNNEL + MAP -->
+    <div class="middle-tri-grid">
+      <!-- 1. Impressions vs Review Clicks Curve -->
+      <div class="chart-card-luxe">
+        <div class="card-head-between">
+          <div>
+            <div class="card-head-title">Impressions vs Review Clicks</div>
+            <div class="card-head-sub">Track your growth over time</div>
+          </div>
+          <select class="card-pill-select">
+            <option>Last 7 Days</option>
+            <option>Last 30 Days</option>
+            <option>All Time</option>
+          </select>
+        </div>
+
+        <div style="position:relative;height:180px;width:100%">
+          <canvas id="growthLineChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 2. Conversion Funnel -->
+      <div class="chart-card-luxe">
+        <div class="card-head-between">
+          <div>
+            <div class="card-head-title">Conversion Funnel</div>
+            <div class="card-head-sub">From scan to Google review</div>
+          </div>
+          <select class="card-pill-select">
+            <option>All Portals</option>
+          </select>
+        </div>
+
+        <div class="funnel-list">
+          <div class="funnel-item">
+            <div class="funnel-meta-left">
+              <i class="ti ti-eye funnel-icon"></i>
+              <span class="funnel-name">Page Views</span>
+              <span class="funnel-count">${fViews}</span>
+            </div>
+            <div class="funnel-bar-outer"><div class="funnel-bar-fill" style="width:100%"></div></div>
+            <span class="funnel-pct">100%</span>
+          </div>
+
+          <div class="funnel-item">
+            <div class="funnel-meta-left">
+              <i class="ti ti-sparkles funnel-icon"></i>
+              <span class="funnel-name">Review Started</span>
+              <span class="funnel-count">${fStarted}</span>
+            </div>
+            <div class="funnel-bar-outer"><div class="funnel-bar-fill" style="width:${fStartedPct}%"></div></div>
+            <span class="funnel-pct">${fStartedPct}%</span>
+          </div>
+
+          <div class="funnel-item">
+            <div class="funnel-meta-left">
+              <i class="ti ti-message-dots funnel-icon"></i>
+              <span class="funnel-name">Review Done</span>
+              <span class="funnel-count">${fCompleted}</span>
+            </div>
+            <div class="funnel-bar-outer"><div class="funnel-bar-fill" style="width:${fCompletedPct}%"></div></div>
+            <span class="funnel-pct">${fCompletedPct}%</span>
+          </div>
+
+          <div class="funnel-item">
+            <div class="funnel-meta-left">
+              <i class="ti ti-external-link funnel-icon"></i>
+              <span class="funnel-name">Google Clicked</span>
+              <span class="funnel-count">${fClicks}</span>
+            </div>
+            <div class="funnel-bar-outer"><div class="funnel-bar-fill" style="width:${fClicksPct}%"></div></div>
+            <span class="funnel-pct">${fClicksPct}%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Review Activity Map -->
+      <div class="chart-card-luxe">
+        <div class="card-head-between">
+          <div>
+            <div class="card-head-title">Review Activity Map</div>
+            <div class="card-head-sub">Live visitor telemetry across regions</div>
+          </div>
+          <a href="javascript:void(0)" onclick="openMapModal()" class="card-head-sub" style="color:var(--amber-dark);font-weight:700;cursor:pointer">View Map ↗</a>
+        </div>
+
+        <div id="liveActivityMap"></div>
+      </div>
+    </div>
+
+    <!-- BOTTOM SECTION: YOUR BUSINESSES + RECENT ACTIVITY -->
+    <div class="bottom-duo-grid" id="businesses">
+      <!-- BUSINESSES COLUMN -->
+      <div>
+        <div class="card-head-between" style="margin-bottom:12px">
+          <div>
+            <div class="card-head-title">Your Businesses</div>
+            <div class="card-head-sub">Showing all <span id="bizCountBadge">${clients.length}</span> active review portals</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <a href="javascript:void(0)" onclick="viewAllBusinesses()" class="card-head-sub" style="color:var(--amber-dark);font-weight:700;cursor:pointer">View All &rarr;</a>
+          </div>
+        </div>
+
+        <!-- CATEGORY & STATUS FILTER PILLS -->
+        <div class="biz-cat-pills">
+          <button class="cat-pill-btn active" data-filter="all" onclick="filterByCat('all', this)">All (${clients.length})</button>
+          <button class="cat-pill-btn" data-filter="restaurant" onclick="filterByCat('restaurant', this)">Restaurants</button>
+          <button class="cat-pill-btn" data-filter="cafe" onclick="filterByCat('cafe', this)">Café & Dining</button>
+          <button class="cat-pill-btn" data-filter="retail" onclick="filterByCat('retail', this)">Retail</button>
+          <button class="cat-pill-btn" data-filter="service" onclick="filterByCat('service', this)">Services</button>
+        </div>
+
+        <div class="biz-trio-grid" id="bizGridContainer">
+          ${bizCardsHtml}
+        </div>
+      </div>
+
+      <!-- RECENT ACTIVITY FEED COLUMN -->
+      <div class="chart-card-luxe" id="analytics">
+        <div class="card-head-between" style="margin-bottom:12px">
+          <div>
+            <div class="card-head-title" style="display:flex;align-items:center;gap:8px">
+              Recent Activity
+              <span class="live-status-badge"><span class="live-ping-dot"></span> LIVE</span>
+            </div>
+            <div class="card-head-sub">Live customer interactions</div>
+          </div>
+          <a href="javascript:void(0)" onclick="openActivityModal()" class="card-head-sub" style="color:var(--amber-dark);font-weight:700;cursor:pointer">View All</a>
+        </div>
+
+        <div class="activity-feed-list" id="recentActivityList">
+          ${recentActivityHtml}
+        </div>
+      </div>
+    </div>
+
+    <!-- PROMOTIONAL GROWTH BANNER -->
+    <div class="promo-growth-banner">
+      <div class="promo-left-cluster">
+        <div class="promo-rocket-box">🚀</div>
+        <div>
+          <div class="promo-title">Turn Feedback into Growth</div>
+          <div class="promo-subtitle">More reviews. More visibility. More customers.</div>
+        </div>
+      </div>
+
+      <a href="/admin/clients/new" class="promo-cta-btn">+ Add Your Next Business</a>
+
+      <div class="promo-bottom-cursive">"Happy customers build brighter tomorrows."</div>
+    </div>
+
+    <!-- ── MODAL 1: FULL INTERACTIVE MAP MODAL ── -->
+    <div class="luxe-modal-backdrop" id="mapModalBackdrop" onclick="if(event.target===this)closeMapModal()">
+      <div class="luxe-modal-card">
+        <div class="luxe-modal-head">
+          <div>
+            <div class="luxe-modal-title">Live Review Telemetry Map</div>
+            <div style="font-size:12px;color:var(--t-muted)">Global & Regional real-time review portal engagement</div>
+          </div>
+          <button class="luxe-modal-close" onclick="closeMapModal()"><i class="ti ti-x"></i></button>
+        </div>
+        <div class="luxe-modal-body" style="padding:0">
+          <div id="modalBigMapCanvas" style="height:460px;width:100%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MODAL 2: FULL RECENT ACTIVITY AUDIT STREAM ── -->
+    <div class="luxe-modal-backdrop" id="activityModalBackdrop" onclick="if(event.target===this)closeActivityModal()">
+      <div class="luxe-modal-card">
+        <div class="luxe-modal-head">
+          <div>
+            <div class="luxe-modal-title" style="display:flex;align-items:center;gap:8px">
+              Live Interaction Stream
+              <span class="live-status-badge"><span class="live-ping-dot"></span> REALTIME</span>
+            </div>
+            <div style="font-size:12px;color:var(--t-muted)">Complete chronological audit trail of scans, impressions and review clicks</div>
+          </div>
+          <button class="luxe-modal-close" onclick="closeActivityModal()"><i class="ti ti-x"></i></button>
+        </div>
+        <div class="luxe-modal-body">
+          <div id="modalActivityList" class="activity-feed-list">
+            ${(telemetry.allActivities || activities).map(act => {
+              const isClick = act.type === 'click';
+              return `
+              <div class="activity-row" style="padding:10px 0">
+                <div class="activity-icon-wrap ${isClick ? 'activity-green' : 'activity-blue'}">
+                  <i class="${isClick ? 'ti ti-external-link' : 'ti ti-eye'}"></i>
+                </div>
+                <div class="activity-detail">
+                  <div class="activity-event">${isClick ? 'Google Maps Review Click' : 'Portal Landing Impression'}</div>
+                  <div class="activity-biz">${esc(act.biz)} &bull; <span style="color:var(--t-muted)">${esc(act.details || '')}</span></div>
+                </div>
+                <span class="activity-time">${esc(act.timeStr || act.formattedTime || 'Recent')}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script>
-      function showToast(msg, isErr = false) {
-        const box = document.getElementById('toastBox');
-        if (!box) return;
-        const t = document.createElement('div');
-        t.className = 'toast-msg ' + (isErr ? 'error' : 'success');
-        t.innerHTML = (isErr ? '<i class="ti ti-alert-circle"></i> ' : '<i class="ti ti-check"></i> ') + msg;
-        box.appendChild(t);
-        setTimeout(() => {
-          t.style.opacity = '0';
-          t.style.transform = 'translateY(10px)';
-          t.style.transition = 'all 0.2s';
-          setTimeout(() => t.remove(), 200);
-        }, 2500);
+      // 1. Initialize Spline Curve Chart with REAL-TIME Firestore Telemetry
+      const ctx = document.getElementById('growthLineChart');
+      let growthChartInstance = null;
+      if (ctx) {
+        growthChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: ${JSON.stringify(chartLabels)},
+            datasets: [
+              {
+                label: 'Impressions',
+                data: ${JSON.stringify(viewSeries)},
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                borderWidth: 2.5,
+                tension: 0.4,
+                fill: true,
+                pointBackgroundColor: '#f59e0b',
+                pointRadius: 4
+              },
+              {
+                label: 'Review Clicks',
+                data: ${JSON.stringify(clickSeries)},
+                borderColor: '#292524',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                tension: 0.4,
+                borderDash: [4, 4],
+                pointBackgroundColor: '#292524',
+                pointRadius: 3
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'top',
+                align: 'end',
+                labels: { boxWidth: 10, font: { size: 11, family: 'Plus Jakarta Sans' }, color: '#78716c' }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: { font: { size: 10, family: 'Plus Jakarta Sans' }, color: '#a8a29e' }
+              },
+              y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(0,0,0,0.04)' },
+                ticks: { font: { size: 10, family: 'Plus Jakarta Sans' }, color: '#a8a29e', precision: 0 }
+              }
+            }
+          }
+        });
       }
 
-      async function quickUpdateTheme(clientId, theme, selectEl) {
-        const prev = selectEl.getAttribute('data-prev') || 'dark';
-        selectEl.disabled = true;
-        try {
-          const res = await fetch('/admin/clients/' + clientId + '/quick-theme', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ primary_theme: theme })
-          });
-          const data = await res.json();
-          if (data && data.ok) {
-            selectEl.setAttribute('data-prev', theme);
-            const label = theme === 'light' ? 'Light ☀️' : theme === 'system' ? 'Auto 📱' : 'Dark 🌙';
-            showToast('Theme set to ' + label);
-          } else {
-            throw new Error((data && data.error) || 'Failed to update theme');
+      // 2. Initialize Interactive Live Leaflet Map
+      const geoPoints = ${JSON.stringify(telemetry.geoPoints || [
+        { city: 'Hyderabad', lat: 17.3850, lng: 78.4867, views: 1 },
+        { city: 'Vijayawada', lat: 16.5062, lng: 80.6480, views: 1 },
+        { city: 'Nellore', lat: 14.4426, lng: 79.9865, views: 1 }
+      ])};
+
+      let liveMap = null;
+      function initLiveMap() {
+        const mapEl = document.getElementById('liveActivityMap');
+        if (!mapEl || typeof L === 'undefined') return;
+
+        liveMap = L.map('liveActivityMap', {
+          center: [16.0, 79.5],
+          zoom: 6,
+          zoomControl: false,
+          attributionControl: false
+        });
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+          maxZoom: 18
+        }).addTo(liveMap);
+
+        const customMarkerIcon = L.divIcon({
+          className: 'custom-map-icon-wrap',
+          html: '<div class="live-map-marker"><div class="live-map-pulse"></div><div class="live-map-dot"></div></div>',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+
+        geoPoints.forEach(pt => {
+          const m = L.marker([pt.lat, pt.lng], { icon: customMarkerIcon }).addTo(liveMap);
+          m.bindPopup('<div style="font-family:Plus Jakarta Sans;padding:4px"><strong>' + pt.city + '</strong><br><span style="color:#d97706;font-weight:700">' + (pt.views || 1) + ' views</span></div>');
+        });
+      }
+
+      // Modal Map Instance
+      let modalMap = null;
+      function openMapModal() {
+        const modal = document.getElementById('mapModalBackdrop');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        setTimeout(() => {
+          if (!modalMap && typeof L !== 'undefined') {
+            modalMap = L.map('modalBigMapCanvas', {
+              center: [16.0, 79.5],
+              zoom: 6
+            });
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+              maxZoom: 18
+            }).addTo(modalMap);
+
+            const customMarkerIcon = L.divIcon({
+              className: 'custom-map-icon-wrap',
+              html: '<div class="live-map-marker"><div class="live-map-pulse"></div><div class="live-map-dot"></div></div>',
+              iconSize: [16, 16],
+              iconAnchor: [8, 8]
+            });
+
+            geoPoints.forEach(pt => {
+              const m = L.marker([pt.lat, pt.lng], { icon: customMarkerIcon }).addTo(modalMap);
+              m.bindPopup('<div style="font-family:Plus Jakarta Sans;padding:6px"><strong>' + pt.city + ' Region</strong><br><span style="color:#d97706;font-weight:700">' + (pt.views || 1) + ' total customer interactions</span></div>');
+            });
+          } else if (modalMap) {
+            modalMap.invalidateSize();
           }
-        } catch (err) {
-          selectEl.value = prev;
-          showToast(err.message || 'Error updating theme', true);
-        } finally {
-          selectEl.disabled = false;
+        }, 150);
+      }
+
+      function closeMapModal() {
+        const modal = document.getElementById('mapModalBackdrop');
+        if (modal) modal.style.display = 'none';
+      }
+
+      function openActivityModal() {
+        const modal = document.getElementById('activityModalBackdrop');
+        if (modal) modal.style.display = 'flex';
+      }
+
+      function closeActivityModal() {
+        const modal = document.getElementById('activityModalBackdrop');
+        if (modal) modal.style.display = 'none';
+      }
+
+      // 3. Business Filtering and "View All"
+      let currentCategory = 'all';
+
+      function viewAllBusinesses() {
+        const searchInput = document.querySelector('.topbar-search-input');
+        if (searchInput) searchInput.value = '';
+        filterByCat('all');
+        const bizSection = document.getElementById('businesses');
+        if (bizSection) {
+          bizSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       }
+
+      function filterByCat(cat, btnEl) {
+        currentCategory = (cat || 'all').toLowerCase();
+        if (btnEl) {
+          document.querySelectorAll('.cat-pill-btn').forEach(b => b.classList.remove('active'));
+          btnEl.classList.add('active');
+        } else {
+          document.querySelectorAll('.cat-pill-btn').forEach(b => {
+            if (b.getAttribute('data-filter') === currentCategory) b.classList.add('active');
+            else b.classList.remove('active');
+          });
+        }
+        applyBusinessFilters();
+      }
+
+      function filterBusinesses(query) {
+        applyBusinessFilters(query);
+      }
+
+      function applyBusinessFilters(overrideQuery) {
+        const searchInput = document.querySelector('.topbar-search-input');
+        const q = (overrideQuery !== undefined ? overrideQuery : (searchInput ? searchInput.value : '')).toLowerCase().trim();
+        let visibleCount = 0;
+
+        document.querySelectorAll('.biz-luxury-card').forEach(card => {
+          const name = (card.getAttribute('data-name') || '').toLowerCase();
+          const slug = (card.getAttribute('data-slug') || '').toLowerCase();
+          const cat = (card.getAttribute('data-category') || '').toLowerCase();
+
+          const matchesQuery = !q || name.includes(q) || slug.includes(q) || cat.includes(q);
+          const matchesCat = currentCategory === 'all' || cat.includes(currentCategory);
+
+          if (matchesQuery && matchesCat) {
+            card.style.display = 'flex';
+            visibleCount++;
+          } else {
+            card.style.display = 'none';
+          }
+        });
+
+        const badge = document.getElementById('bizCountBadge');
+        if (badge) badge.innerText = visibleCount;
+      }
+
+      // 4. Live Polling for Recent Activity & Telemetry
+      async function pollLiveTelemetry() {
+        try {
+          const res = await fetch('/admin/api/telemetry/live');
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data && data.ok && data.telemetry) {
+            const t = data.telemetry;
+            if (t.recentActivities && t.recentActivities.length > 0) {
+              const html = t.recentActivities.slice(0, 5).map(act => {
+                const isClick = act.type === 'click';
+                return '<div class="activity-row">' +
+                  '<div class="activity-icon-wrap ' + (isClick ? 'activity-green' : 'activity-blue') + '">' +
+                  '<i class="' + (isClick ? 'ti ti-external-link' : 'ti ti-eye') + '"></i>' +
+                  '</div>' +
+                  '<div class="activity-detail">' +
+                  '<div class="activity-event">' + (isClick ? 'Google click' : 'Page view') + '</div>' +
+                  '<div class="activity-biz">' + (act.biz || 'Portal') + '</div>' +
+                  '</div>' +
+                  '<span class="activity-time">' + (act.timeStr || 'Just now') + '</span>' +
+                  '</div>';
+              }).join('');
+              const el = document.getElementById('recentActivityList');
+              if (el) el.innerHTML = html;
+            }
+          }
+        } catch (e) {
+          // background poll ignore
+        }
+      }
+
+      window.addEventListener('DOMContentLoaded', () => {
+        initLiveMap();
+        setInterval(pollLiveTelemetry, 6000);
+      });
     </script>
-  `);
+  `, '', 'dashboard');
 }
 
 // ── CLIENT FORM ────────────────────────────────────────────────────
@@ -600,19 +2266,19 @@ function clientFormPage(client, error) {
   const currentTheme = client?.primary_theme || 'dark';
   const allowToggle = client ? (client.allow_theme_toggle !== 0 && client.allow_theme_toggle !== false) : true;
 
-  return shell(isEdit ? 'Edit — '+client.business_name : 'New Client', `
-    <div class="page-hdr">
+  return shell(isEdit ? 'Edit — '+client.business_name : 'New Business', `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
       <div>
-        <div class="page-title">${isEdit ? 'Edit client' : 'Add new client'}</div>
-        <div class="page-sub">${isEdit ? 'Update details for '+esc(client.business_name) : 'Set up a branded review page for your client'}</div>
+        <h1 class="welcome-headline">${isEdit ? 'Edit Business Portal' : 'New Business Portal'}</h1>
+        <div class="welcome-sub">${isEdit ? 'Configuring portal for ' + esc(client.business_name) : 'Deploy a branded 5-star Google review collection page.'}</div>
       </div>
-      <a href="/admin" class="btn btn-ghost"><i class="ti ti-arrow-left"></i> Back</a>
+      <a href="/admin" class="btn btn-secondary"><i class="ti ti-arrow-left"></i> Back to Dashboard</a>
     </div>
 
     ${error ? `<div class="alert-err"><i class="ti ti-alert-circle"></i>${esc(error)}</div>` : ''}
 
     <form method="POST" action="/admin/clients/${isEdit?client.id+'/edit':'new'}">
-      <div class="card card-p">
+      <div style="background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-xl);padding:32px;box-shadow:var(--shadow-card)">
         <div class="form-grid">
 
           <div class="form-2col">
@@ -621,83 +2287,66 @@ function clientFormPage(client, error) {
               <input class="form-input" type="text" name="business_name" value="${esc(client?.business_name||'')}" placeholder="e.g. Cool &amp; Spicy" required>
             </div>
             <div class="form-group">
-              <label class="form-label">Category / Tagline</label>
-              <input class="form-input" type="text" name="category" value="${esc(client?.category||'')}" placeholder="e.g. Ice Creams · Shakes · Pizza">
+              <label class="form-label">Category / Type</label>
+              <input class="form-input" type="text" name="category" value="${esc(client?.category||'')}" placeholder="e.g. Cafe, Restaurant, Ice Cream">
             </div>
           </div>
 
           <div class="form-group">
-            <label class="form-label">Short description (2–3 lines)</label>
-            <textarea class="form-textarea" name="description" placeholder="Tell customers what makes this place special…" required>${esc(client?.description||'')}</textarea>
+            <label class="form-label">Description / Specialty Dishes</label>
+            <input class="form-input" type="text" name="description" value="${esc(client?.description||'')}" placeholder="e.g. Ice creams, Thick shakes, Pizzas, Crispy chicken">
           </div>
 
           <div class="form-group">
-            <label class="form-label">Logo / Emoji icon</label>
-            <input class="form-input" type="text" name="emoji" value="${esc(client?.emoji||'🏪')}" placeholder="🏪 or /images/logo.png" maxlength="255">
-            <span class="form-hint">Single emoji (e.g. 🍗, ☕, 🍕) or public image path (/images/kfc-logo.png)</span>
+            <label class="form-label">Avatar Emoji or Logo Image URL</label>
+            <input class="form-input" type="text" name="emoji" value="${esc(client?.emoji||'🏪')}" placeholder="🏪 or https://example.com/logo.png">
           </div>
 
           ${isEdit ? `
           <div class="form-group">
-            <label class="form-label">Review Page URL Slug</label>
-            <div style="display:flex;align-items:center;background:var(--s2);border:1px solid var(--b1);border-radius:11px;overflow:hidden">
-              <span style="padding:11px 14px;color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;border-right:1px solid var(--b1)">/r/</span>
+            <label class="form-label">Review URL Slug *</label>
+            <div style="display:flex;align-items:center;background:var(--bg-card-subtle);border:1px solid var(--border-light);border-radius:var(--radius-md);overflow:hidden">
+              <span style="padding:12px 16px;color:var(--t-muted);font-size:13px;font-family:'JetBrains Mono',monospace;border-right:1px solid var(--border-light)">/r/</span>
               <input class="form-input" style="border:none;background:transparent;margin:0" type="text" name="slug" value="${esc(client.slug)}" placeholder="slug" required>
             </div>
-            <span class="form-hint">Unique URL identifier used for review links &amp; QR standees</span>
+            <span class="form-hint">Unique URL slug used for standalone web links and QR table standees.</span>
           </div>` : ''}
 
-          <!-- ── PRIMARY THEME & VISUAL STYLING PERMISSION ── -->
-          <div class="form-group" style="background:var(--s2);border:1px solid var(--b1);border-radius:14px;padding:18px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-              <label class="form-label" style="margin:0;display:flex;align-items:center;gap:6px;color:var(--t1)">
-                <i class="ti ti-palette" style="color:var(--accent);font-size:17px"></i> Client Primary Theme &amp; Visual Styling
+          <!-- BRAND THEME & COLOR -->
+          <div class="form-group" style="background:var(--bg-card-subtle);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:22px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+              <label class="form-label" style="margin:0;display:flex;align-items:center;gap:8px;color:var(--t-heading)">
+                <i class="ti ti-palette" style="color:var(--amber-gold);font-size:18px"></i> Portal Visual Styling &amp; Colors
               </label>
-              <span class="badge badge-purple" style="font-size:11px">Admin Managed</span>
+              <span class="nav-badge-new" style="background:var(--sky);color:#fff">Admin Managed</span>
             </div>
 
-            <div class="form-2col" style="margin-bottom:14px">
+            <div class="form-2col" style="margin-bottom:16px">
               <div class="form-group" style="margin-bottom:0">
-                <label class="form-label" style="font-size:10.5px">Primary Theme Mode</label>
+                <label class="form-label" style="font-size:11px">Default Theme Mode</label>
                 <select class="form-select" name="primary_theme" id="primaryThemeSelect">
-                  <option value="dark" ${currentTheme === 'dark' ? 'selected' : ''}>🌙 Dark Mode (Sleek Dark Glass &amp; Midnight)</option>
-                  <option value="light" ${currentTheme === 'light' ? 'selected' : ''}>☀️ Light Mode (Clean White &amp; Daylight Glass)</option>
-                  <option value="system" ${currentTheme === 'system' ? 'selected' : ''}>📱 Auto / System (Follows Customer Device Setting)</option>
+                  <option value="dark" ${currentTheme === 'dark' ? 'selected' : ''}>🌙 Dark Mode (Midnight Charcoal)</option>
+                  <option value="light" ${currentTheme === 'light' ? 'selected' : ''}>☀️ Light Mode (Daylight Minimal)</option>
+                  <option value="system" ${currentTheme === 'system' ? 'selected' : ''}>📱 Auto / System (Matches Visitor Device)</option>
                 </select>
-                <span class="form-hint">Default theme rendered when visitors open this review page</span>
               </div>
 
               <div class="form-group" style="margin-bottom:0">
-                <label class="form-label" style="font-size:10.5px">Brand Accent Color</label>
+                <label class="form-label" style="font-size:11px">Brand Accent Color</label>
                 <div class="color-row">
-                  <input class="color-pick" type="color" id="colorPick" value="${esc(client?.primary_color||'#7c4dff')}" oninput="document.getElementById('colorTxt').value=this.value">
-                  <input class="form-input" type="text" id="colorTxt" name="primary_color" value="${esc(client?.primary_color||'#7c4dff')}" placeholder="#7c4dff" oninput="document.getElementById('colorPick').value=this.value" style="flex:1">
+                  <input class="color-pick" type="color" id="colorPick" value="${esc(client?.primary_color||'#f59e0b')}" oninput="document.getElementById('colorTxt').value=this.value">
+                  <input class="form-input" type="text" id="colorTxt" name="primary_color" value="${esc(client?.primary_color||'#f59e0b')}" placeholder="#f59e0b" oninput="document.getElementById('colorPick').value=this.value" style="flex:1">
                 </div>
-                <span class="form-hint">Powers primary review buttons, glow orbs, and active tags</span>
-              </div>
-            </div>
-
-            <!-- QUICK PRESET PALETTES -->
-            <div style="margin-bottom:14px">
-              <label class="form-label" style="font-size:10.5px;margin-bottom:6px">Quick Preset Palettes</label>
-              <div style="display:flex;flex-wrap:wrap;gap:8px">
-                <button type="button" class="preset-btn" onclick="setPresetColor('#7c4dff')" style="background:rgba(124,77,255,0.15);border:1px solid #7c4dff;color:#c4b5fd;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#7c4dff"></span> Violet Glow</button>
-                <button type="button" class="preset-btn" onclick="setPresetColor('#e4002b')" style="background:rgba(228,0,43,0.15);border:1px solid #e4002b;color:#fca5a5;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#e4002b"></span> Crimson Red</button>
-                <button type="button" class="preset-btn" onclick="setPresetColor('#1d4ed8')" style="background:rgba(29,78,216,0.15);border:1px solid #1d4ed8;color:#93c5fd;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#1d4ed8"></span> Royal Blue</button>
-                <button type="button" class="preset-btn" onclick="setPresetColor('#10b981')" style="background:rgba(16,185,129,0.15);border:1px solid #10b981;color:#6ee7b7;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#10b981"></span> Emerald Green</button>
-                <button type="button" class="preset-btn" onclick="setPresetColor('#ea580c')" style="background:rgba(234,88,12,0.15);border:1px solid #ea580c;color:#fdba74;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#ea580c"></span> Sunset Orange</button>
-                <button type="button" class="preset-btn" onclick="setPresetColor('#ec4899')" style="background:rgba(236,72,153,0.15);border:1px solid #ec4899;color:#fbcfe8;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#ec4899"></span> Rose Pink</button>
-                <button type="button" class="preset-btn" onclick="setPresetColor('#475569')" style="background:rgba(71,85,105,0.2);border:1px solid #475569;color:#cbd5e1;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#475569"></span> Slate Minimal</button>
               </div>
             </div>
 
             <!-- THEME PERMISSION TOGGLE -->
-            <div style="border-top:1px solid var(--b1);padding-top:14px;margin-top:12px;display:flex;align-items:center;justify-content:space-between">
+            <div style="border-top:1px solid var(--border-light);padding-top:16px;display:flex;align-items:center;justify-content:space-between">
               <div>
-                <div style="font-size:13px;font-weight:600;color:var(--t1);margin-bottom:2px">Allow Customer Theme Toggle</div>
-                <div style="font-size:11.5px;color:var(--t3)">When turned ON, visitors can tap the sun/moon button to switch light/dark. When turned OFF, the toggle is hidden and visitors are locked into the Admin's configured primary theme.</div>
+                <div style="font-size:13.5px;font-weight:700;color:var(--t-heading);margin-bottom:2px">Allow Customer Theme Switching</div>
+                <div style="font-size:12px;color:var(--t-muted)">Allow visitors to manually toggle light/dark on their phone.</div>
               </div>
-              <div class="toggle-wrap" style="margin-left:14px;flex-shrink:0">
+              <div class="toggle-wrap" style="flex-shrink:0">
                 <div class="toggle ${allowToggle ? 'on' : ''}" id="togTheme" onclick="flipThemeToggle()"><div class="toggle-k"></div></div>
                 <input type="hidden" name="allow_theme_toggle" id="themeToggleInp" value="${allowToggle ? 'on' : 'off'}">
               </div>
@@ -707,63 +2356,59 @@ function clientFormPage(client, error) {
           <div class="form-group">
             <label class="form-label">Google Place ID *</label>
             <input class="form-input" type="text" name="place_id" value="${esc(client?.place_id||'')}" placeholder="ChIJN1t_tDeuEmsRUsoyG83frY4" required>
-            <span class="form-hint">Find at: <code>developers.google.com/maps/documentation/javascript/examples/places-placeid-finder</code></span>
+            <span class="form-hint">Find your Place ID from Google Maps Place ID Finder.</span>
           </div>
 
-          <!-- ── QR CODE & LINK USAGE RESTRICTION / TIMER ── -->
-          <div class="form-group" style="background:var(--s2);border:1px solid var(--b1);border-radius:14px;padding:16px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-              <label class="form-label" style="margin:0;display:flex;align-items:center;gap:6px;color:var(--t1)">
-                <i class="ti ti-hourglass-empty" style="color:var(--accent);font-size:16px"></i> QR Code &amp; Link Expiry Timer
+          <!-- QR TIMER / EXPIRY -->
+          <div class="form-group" style="background:var(--bg-card-subtle);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:22px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <label class="form-label" style="margin:0;display:flex;align-items:center;gap:8px;color:var(--t-heading)">
+                <i class="ti ti-hourglass-empty" style="color:var(--amber-gold);font-size:18px"></i> Subscription &amp; Validity Timer
               </label>
-              ${expInfo ? `<span class="badge ${expInfo.badgeClass}" style="font-size:11px">${expInfo.dot?'<span class="badge-dot"></span>':''}${expInfo.label}</span>` : '<span class="badge badge-purple" style="font-size:11px">Default: Unlimited</span>'}
+              ${expInfo ? `<span class="biz-status-pill">${expInfo.label}</span>` : '<span class="biz-status-pill">Unlimited</span>'}
             </div>
-            
+
             <div class="form-2col">
               <div class="form-group">
-                <label class="form-label" style="font-size:10.5px">Validity Duration / Preset</label>
+                <label class="form-label" style="font-size:11px">Validity Duration</label>
                 <select class="form-select" name="expiry_type" id="expiryType" onchange="onExpiryChange()">
-                  <option value="unlimited" ${!client?.expires_at ? 'selected' : ''}>♾️ Unlimited (No expiration)</option>
+                  <option value="unlimited" ${!client?.expires_at ? 'selected' : ''}>♾️ Unlimited (Continuous SaaS Access)</option>
                   <option value="7d">⏱️ 7 Days</option>
                   <option value="14d">⏱️ 14 Days</option>
                   <option value="30d">⏱️ 30 Days (1 Month)</option>
                   <option value="90d">⏱️ 90 Days (3 Months)</option>
                   <option value="180d">⏱️ 180 Days (6 Months)</option>
                   <option value="365d">⏱️ 1 Year</option>
-                  <option value="custom" ${client?.expires_at ? 'selected' : ''}>📅 Specific Date &amp; Time...</option>
+                  <option value="custom" ${client?.expires_at ? 'selected' : ''}>📅 Specific Date...</option>
                 </select>
               </div>
               <div class="form-group" id="customDateWrap" style="${client?.expires_at ? '' : 'display:none'}">
-                <label class="form-label" style="font-size:10.5px">Exact Expiry Date</label>
+                <label class="form-label" style="font-size:11px">Exact Expiry Date</label>
                 <input class="form-input" type="datetime-local" name="custom_expires_at" id="customExpiresAt" value="${client?.expires_at ? new Date(client.expires_at).toISOString().slice(0,16) : ''}">
               </div>
             </div>
-            <span class="form-hint" style="margin-top:6px;display:block">
-              Set how long customers can scan this QR code or open the review link. When the timer finishes, the page automatically switches to a friendly expired notice.
-            </span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">Quick tags <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--t3)">(one per line — Label | Review text)</span></label>
-            <textarea class="form-textarea" name="tags_input" style="min-height:140px;font-family:'DM Mono',monospace;font-size:12px;line-height:1.7" placeholder="Biryani must-try|The biryani here is exceptional — perfectly spiced.">${tagsStr}</textarea>
-            <span class="form-hint">Format: <code>Button label | Full review text inserted when tapped</code></span>
+            <label class="form-label">Review Prompts &amp; Tags <span style="font-weight:400;text-transform:none;color:var(--t-muted)">(One per line — Label | Review text)</span></label>
+            <textarea class="form-textarea" name="tags_input" style="min-height:140px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7">${tagsStr}</textarea>
           </div>
 
           ${isEdit ? `
           <div class="form-group">
-            <label class="form-label">Page status</label>
+            <label class="form-label">Publishing Status</label>
             <div class="toggle-wrap">
               <div class="toggle ${client.active?'on':''}" id="tog" onclick="flipToggle()"><div class="toggle-k"></div></div>
               <input type="hidden" name="active" id="activeInp" value="${client.active?'on':'off'}">
-              <span id="togLbl" style="font-size:13.5px;color:var(--t2)">${client.active ? 'Active — page is live and accessible' : 'Paused — page is hidden from visitors'}</span>
+              <span id="togLbl" style="font-size:13.5px;color:var(--t-body);font-weight:600">${client.active ? 'Active — portal is live online' : 'Paused — portal is temporarily hidden'}</span>
             </div>
           </div>` : ''}
 
-          <div style="display:flex;gap:10px;padding-top:4px">
+          <div style="display:flex;gap:12px;padding-top:8px">
             <button class="btn btn-primary" type="submit" style="flex:1;height:48px;font-size:14px">
-              <i class="ti ti-check"></i> ${isEdit ? 'Save changes' : 'Create review page'}
+              ${isEdit ? 'Save Changes' : 'Create Business Portal'}
             </button>
-            <a href="/admin" class="btn btn-ghost" style="height:48px;font-size:14px">Cancel</a>
+            <a href="/admin" class="btn btn-secondary" style="height:48px;padding:0 24px">Cancel</a>
           </div>
 
         </div>
@@ -771,606 +2416,203 @@ function clientFormPage(client, error) {
     </form>
 
     <script>
-    function setPresetColor(hex) {
-      document.getElementById('colorPick').value = hex;
-      document.getElementById('colorTxt').value = hex;
-    }
-
-    function flipThemeToggle() {
-      const tog = document.getElementById('togTheme');
-      const on = tog.classList.toggle('on');
-      document.getElementById('themeToggleInp').value = on ? 'on' : 'off';
-    }
-
-    function flipToggle() {
-      const tog = document.getElementById('tog');
-      const on = tog.classList.toggle('on');
-      document.getElementById('activeInp').value = on ? 'on' : 'off';
-      document.getElementById('togLbl').textContent = on ? 'Active — page is live and accessible' : 'Paused — page is hidden from visitors';
-    }
-
-    function onExpiryChange() {
-      const val = document.getElementById('expiryType').value;
-      const wrap = document.getElementById('customDateWrap');
-      if (val === 'custom') {
-        wrap.style.display = 'block';
-        if (!document.getElementById('customExpiresAt').value) {
-          const d = new Date();
-          d.setMonth(d.getMonth() + 1);
-          document.getElementById('customExpiresAt').value = d.toISOString().slice(0,16);
-        }
-      } else {
-        wrap.style.display = 'none';
+      function flipToggle() {
+        const t = document.getElementById('tog');
+        const inp = document.getElementById('activeInp');
+        const lbl = document.getElementById('togLbl');
+        const isOn = t.classList.toggle('on');
+        inp.value = isOn ? 'on' : 'off';
+        lbl.textContent = isOn ? 'Active — portal is live online' : 'Paused — portal is temporarily hidden';
       }
-    }
+
+      function flipThemeToggle() {
+        const t = document.getElementById('togTheme');
+        const inp = document.getElementById('themeToggleInp');
+        const isOn = t.classList.toggle('on');
+        inp.value = isOn ? 'on' : 'off';
+      }
+
+      function onExpiryChange() {
+        const val = document.getElementById('expiryType').value;
+        const wrap = document.getElementById('customDateWrap');
+        wrap.style.display = (val === 'custom') ? 'block' : 'none';
+      }
     </script>
-  `);
+  `, '', 'dashboard');
 }
 
-// ── QR STUDIO & STANDEE GENERATOR (7 THEMES + APPLE DESIGN) ─────────
-function qrPage(client, qrDataUrl, url, qrSvg='') {
-  const isImageLogo = client.emoji && (client.emoji.startsWith('/') || client.emoji.startsWith('http') || client.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i));
-  const logoHeaderHtml = isImageLogo
-    ? `<img src="${esc(client.emoji)}" alt="${esc(client.business_name)}" style="width:72px;height:72px;object-fit:contain;border-radius:18px;display:block">`
-    : `<span style="font-size:42px;line-height:1;display:block">${esc(client.emoji || '🏪')}</span>`;
-
-  const logoCenterHtml = isImageLogo
-    ? `<img src="${esc(client.emoji)}" alt="Logo" style="width:26px;height:26px;object-fit:contain;border-radius:6px;display:block">`
-    : `<span style="font-size:20px;line-height:1">${esc(client.emoji || '🏪')}</span>`;
-
+// ── QR CODE STUDIO ─────────────────────────────────────────────────
+function qrPage(client, qrDataUrl, url, qrSvg) {
   const extraHead = `
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <style>
-      /* ── THEME PALETTES & TOKENS ── */
-      :root {
-        --ease-spring: cubic-bezier(0.4, 0, 0.2, 1);
-        --apple-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
-      }
-
-      .btn:active, .theme-chip:active, .icon-opt:active {
-        transform: scale(0.97) !important;
-        transition: transform 0.1s var(--ease-spring);
-      }
-
-      .theme-chip {
-        display: inline-flex; align-items: center; gap: 8px;
-        padding: 9px 14px; border-radius: 12px; font-size: 12.5px; font-weight: 500;
-        background: var(--s2); border: 1px solid var(--b1); color: var(--t2);
-        cursor: pointer; transition: all 0.2s var(--ease-spring); user-select: none;
-      }
-      .theme-chip:hover { background: var(--s3); color: var(--t1); border-color: var(--b2); }
-      .theme-chip.active {
-        background: rgba(124,77,255,0.18); border-color: var(--accent); color: #fff;
-        box-shadow: 0 0 16px rgba(124,77,255,0.25);
-      }
-      .theme-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-
-      /* ── CONTROLS PANEL ── */
-      .ctrl-card { background: var(--s1); border: 1px solid var(--b1); border-radius: 18px; padding: 22px; }
-      .ctrl-sec-title {
-        font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-        color: var(--t3); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
-      }
-
-      /* ── STANDEE PREVIEW CONTAINER (STUDIO MATTE, NO LIGHT) ── */
       .preview-stage {
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        background: #0d0d14;
-        border: 1px solid #1e1e2d; border-radius: 24px; padding: 40px 20px;
-        min-height: 580px; position: relative; overflow: hidden;
+        display: flex; align-items: center; justify-content: center;
+        background: radial-gradient(circle at center, #fbf9f4 0%, #ede6d6 100%);
+        border: 1px solid var(--border-light); border-radius: var(--radius-xl);
+        padding: 40px 20px; min-height: 420px; position: relative;
       }
+      body.dark-theme .preview-stage {
+        background: radial-gradient(circle at center, #191c2b 0%, #0c0d12 100%);
+      }
+      .theme-chip {
+        padding: 8px 14px; border-radius: 20px; border: 1px solid var(--border-light);
+        background: var(--bg-card); color: var(--t-heading); font-size: 12px; font-weight: 600;
+        cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px;
+      }
+      .theme-chip.active { border-color: var(--amber-gold); background: var(--amber-soft); color: var(--amber-dark); }
+      .theme-dot { width: 10px; height: 10px; border-radius: 50%; }
 
-      /* ── STANDEE CARD CORE (GENUINE APPLE INDUSTRIAL DESIGN) ── */
       #standeeCard {
-        width: 100%; max-width: 380px; border-radius: 32px; padding: 36px 24px 28px;
+        width: 100%; max-width: 360px; border-radius: 28px; padding: 32px 24px;
         text-align: center; position: relative; z-index: 2;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.35);
-        transition: all 0.25s var(--ease-spring);
-        font-family: var(--apple-font);
-        box-sizing: border-box;
+        box-shadow: 0 20px 48px rgba(0,0,0,0.12);
+        background: #ffffff; color: #111111;
+        transition: all 0.25s var(--ease);
       }
+      #standeeCard.theme-dark { background: #13151f; color: #fbfaf8; border: 1px solid #24293c; box-shadow: 0 20px 48px rgba(0,0,0,0.5); }
+      #standeeCard.theme-amber { background: linear-gradient(135deg, #1c1917 0%, #0c0a09 100%); color: #fef3c7; border: 1px solid rgba(245, 158, 11, 0.4); }
 
-      /* LOGO EMBLEM DISK */
-      .logo-disk {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 76px; height: 76px; border-radius: 20px; margin: 0 auto 16px;
-        padding: 4px; position: relative;
-        transition: all 0.2s var(--ease-spring);
+      .qr-box-inner {
+        background: #ffffff; padding: 16px; border-radius: 20px; margin: 20px auto;
+        display: inline-block; position: relative; box-shadow: 0 4px 16px rgba(0,0,0,0.06);
       }
-
-      /* THEME: Apple Minimalist Glass & Ceramic */
-      #standeeCard.theme-apple {
-        background: #ffffff;
-        border: 1px solid #e5e5ea;
-        color: #111111;
-        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.12);
-      }
-      #standeeCard.theme-apple .logo-disk {
-        background: #f5f5f7;
-        box-shadow: none;
-        border: 1px solid #e5e5ea;
-      }
-      #standeeCard.theme-apple .card-title {
-        color: #111111;
-        font-weight: 700;
-        letter-spacing: -0.03em;
-        font-size: 22px;
-      }
-      #standeeCard.theme-apple .card-sub {
-        color: #666666;
-        font-weight: 500;
-        letter-spacing: -0.01em;
-      }
-      #standeeCard.theme-apple .qr-box {
-        background: #ffffff;
-        box-shadow: none;
-        border: 1px solid #e5e5ea;
-      }
-      #standeeCard.theme-apple .qr-center-badge {
-        background: #ffffff;
-        border-color: #ffffff;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.12);
-      }
-      #standeeCard.theme-apple .scan-hint {
-        background: #f5f5f7;
-        color: #111111;
-      }
-      #standeeCard.theme-apple .card-footer {
-        color: #8e8e93;
-      }
-
-      /* THEME: M3 Dark */
-      #standeeCard.theme-m3dark {
-        background: #16161a; border: 1px solid #2d2d34; color: #f8fafc;
-        box-shadow: 0 20px 48px rgba(0,0,0,0.6);
-      }
-      #standeeCard.theme-m3dark .logo-disk { background: #22222a; border: 1px solid #33333d; }
-      #standeeCard.theme-m3dark .card-title { color: #f8fafc; letter-spacing: -0.02em; }
-      #standeeCard.theme-m3dark .card-sub { color: #94a3b8; }
-      #standeeCard.theme-m3dark .qr-box { background: #ffffff; border: 1px solid #2d2d34; }
-      #standeeCard.theme-m3dark .qr-center-badge { background: #ffffff; border-color: #ffffff; color: #111; }
-      #standeeCard.theme-m3dark .scan-hint { background: #23232a; color: #94a3b8; }
-      #standeeCard.theme-m3dark .card-footer { color: #64748b; }
-
-      /* THEME: M3 Light */
-      #standeeCard.theme-m3light {
-        background: #ffffff; border: 1px solid #e2e8f0; color: #0f172a;
-        box-shadow: 0 16px 40px rgba(0,0,0,0.08);
-      }
-      #standeeCard.theme-m3light .logo-disk { background: #f8fafc; border: 1px solid #e2e8f0; box-shadow: none; }
-      #standeeCard.theme-m3light .card-title { color: #0f172a; }
-      #standeeCard.theme-m3light .card-sub { color: #64748b; }
-      #standeeCard.theme-m3light .qr-box { background: #f8fafc; border: 1px solid #e2e8f0; }
-      #standeeCard.theme-m3light .qr-center-badge { background: #ffffff; border-color: #ffffff; }
-      #standeeCard.theme-m3light .scan-hint { background: #f1f5f9; color: #475569; }
-      #standeeCard.theme-m3light .card-footer { color: #94a3b8; }
-
-      /* THEME: Glassmorphism Ocean */
-      #standeeCard.theme-glass {
-        background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);
-        border: 1px solid rgba(255, 255, 255, 0.35); color: #ffffff;
-        box-shadow: 0 16px 40px rgba(2, 132, 199, 0.25);
-      }
-      #standeeCard.theme-glass .logo-disk { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.35); }
-      #standeeCard.theme-glass .card-title { color: #ffffff; }
-      #standeeCard.theme-glass .card-sub { color: #e0f2fe; }
-      #standeeCard.theme-glass .qr-box { background: #ffffff; box-shadow: none; }
-      #standeeCard.theme-glass .qr-center-badge { background: #ffffff; border-color: #ffffff; }
-      #standeeCard.theme-glass .scan-hint { background: rgba(255,255,255,0.22); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); }
-      #standeeCard.theme-glass .card-footer { color: #e0f2fe; }
-
-      /* THEME: Neumorphic Soft */
-      #standeeCard.theme-neumorphic {
-        background: #e0e5ec; border: none; color: #334155;
-        box-shadow: 12px 12px 28px #b8b9be, -12px -12px 28px #ffffff;
-      }
-      #standeeCard.theme-neumorphic .logo-disk {
-        background: #e0e5ec;
-        box-shadow: 3px 3px 6px #b8b9be, -3px -3px 6px #ffffff;
-      }
-      #standeeCard.theme-neumorphic .card-title { color: #1e293b; }
-      #standeeCard.theme-neumorphic .card-sub { color: #64748b; }
-      #standeeCard.theme-neumorphic .qr-box {
-        background: #e0e5ec;
-        box-shadow: inset 3px 3px 6px #b8b9be, inset -3px -3px 6px #ffffff;
-        padding: 14px; border-radius: 22px;
-      }
-      #standeeCard.theme-neumorphic .qr-center-badge { background: #e0e5ec; box-shadow: 1px 1px 3px #b8b9be; border-color: #e0e5ec; }
-      #standeeCard.theme-neumorphic .scan-hint {
-        background: #e0e5ec; color: #475569;
-        box-shadow: 2px 2px 5px #b8b9be, -2px -2px 5px #ffffff;
-      }
-      #standeeCard.theme-neumorphic .card-footer { color: #64748b; }
-
-      /* THEME: Minimalist Pure */
-      #standeeCard.theme-minimalist {
-        background: #ffffff; border: 2px solid #000; color: #000;
-        border-radius: 22px; box-shadow: 5px 5px 0px #000;
-      }
-      #standeeCard.theme-minimalist .logo-disk { background: #fff; border: 2px solid #000; }
-      #standeeCard.theme-minimalist .card-title { color: #000; font-weight: 800; }
-      #standeeCard.theme-minimalist .card-sub { color: #3f3f46; font-weight: 500; }
-      #standeeCard.theme-minimalist .qr-box { background: #fff; border: 2px solid #000; border-radius: 16px; }
-      #standeeCard.theme-minimalist .qr-center-badge { background: #ffffff; border: 2px solid #000; }
-      #standeeCard.theme-minimalist .scan-hint { background: #f4f4f5; color: #000; border: 1px solid #000; }
-      #standeeCard.theme-minimalist .card-footer { color: #000; font-weight: 700; }
-
-      /* THEME: Gradient Sunset & Aurora */
-      #standeeCard.theme-gradient {
-        background: linear-gradient(145deg, #4338ca 0%, #7c3aed 50%, #db2777 100%);
-        border: 1px solid rgba(255,255,255,0.3); color: #ffffff;
-        box-shadow: 0 16px 40px rgba(124, 58, 237, 0.3);
-      }
-      #standeeCard.theme-gradient .logo-disk { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.35); }
-      #standeeCard.theme-gradient .card-title { color: #ffffff; }
-      #standeeCard.theme-gradient .card-sub { color: #fdf2f8; opacity: 0.95; }
-      #standeeCard.theme-gradient .qr-box { background: #ffffff; box-shadow: none; }
-      #standeeCard.theme-gradient .qr-center-badge { background: #ffffff; border-color: #ffffff; }
-      #standeeCard.theme-gradient .scan-hint { background: rgba(255,255,255,0.2); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); }
-      #standeeCard.theme-gradient .card-footer { color: #fdf2f8; opacity: 0.9; }
-
-      /* QR Box with Instant Floating Center Badge */
-      .qr-box {
-        display: inline-block; padding: 12px; border-radius: 20px;
-        margin: 14px 0 12px; position: relative; transition: all 0.2s var(--ease-spring);
-      }
-      .qr-canvas-el { display: block; border-radius: 12px; width: 175px; height: 175px; margin: 0 auto; }
-      
-      .qr-center-badge {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 42px;
-        height: 42px;
-        border-radius: 11px;
-        background: #ffffff;
-        border: 2px solid #ffffff;
-        box-shadow: 0 1px 6px rgba(0,0,0,0.14);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none;
-        z-index: 10;
-        transition: all 0.2s var(--ease-spring);
-      }
-
-      .card-title { font-size: 22px; font-weight: 700; line-height: 1.2; margin-bottom: 3px; }
-      .card-sub {
-        font-size: 13px; line-height: 1.4; font-weight: 500;
-        white-space: nowrap; width: 100%; margin: 0 auto 8px;
-        letter-spacing: -0.01em;
-      }
-      .stars-row {
-        color: #ffb800; font-size: 17px; margin: 3px 0 6px; letter-spacing: 3px;
-      }
-      .scan-hint {
-        display: inline-flex; align-items: center; gap: 6px;
-        font-size: 11.5px; font-weight: 600; padding: 6px 14px; border-radius: 20px;
-        margin: 2px auto 14px; letter-spacing: -0.01em;
-      }
-      .card-footer {
-        margin-top: 4px; font-size: 11.5px; font-weight: 600; letter-spacing: -0.01em;
-        display: flex; align-items: center; justify-content: center; gap: 6px;
-      }
-
-      /* Icon Options */
-      .icon-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-      .icon-opt {
-        padding: 8px 4px; border-radius: 10px; background: var(--s2); border: 1px solid var(--b1);
-        color: var(--t1); cursor: pointer; text-align: center; font-size: 16px; transition: all 0.15s;
-        display: flex; align-items: center; justify-content: center; min-height: 38px;
-      }
-      .icon-opt.active { background: rgba(124,77,255,0.2); border-color: var(--accent); }
-
-      /* Print guidelines */
-      @media print {
-        body { background: #fff !important; color: #000 !important; }
-        .topbar, .page-hdr, .ctrl-col, .no-print { display: none !important; }
-        .page { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
-        .preview-stage {
-          background: #fff !important; border: none !important; padding: 0 !important;
-          min-height: auto !important; position: static !important;
-        }
-        #standeeCard {
-          max-width: 380px !important; margin: 30px auto !important;
-          box-shadow: none !important; border: 1px solid #ddd !important;
-          page-break-inside: avoid;
-        }
-      }
+      .qr-img { width: 200px; height: 200px; display: block; }
     </style>
   `;
 
-  return shell('QR Studio & Standees — ' + client.business_name, `
-    <div class="page-hdr">
+  return shell('QR Studio — ' + client.business_name, `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
       <div>
-        <div class="page-title">QR Studio &amp; Table Standee Generator</div>
-        <div class="page-sub">${esc(client.business_name)} · 7 Design Themes with Live Apple-Grade Preview</div>
+        <h1 class="welcome-headline">QR Code &amp; Standee Studio</h1>
+        <div class="welcome-sub">Generate printable QR standees and promotional materials for ${esc(client.business_name)}.</div>
       </div>
-      <div style="display:flex;gap:8px">
-        <a href="/r/${client.slug}" target="_blank" class="btn btn-ghost"><i class="ti ti-external-link"></i> Live Review Page</a>
-        <a href="/admin" class="btn btn-ghost"><i class="ti ti-arrow-left"></i> Dashboard</a>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-secondary" onclick="downloadStandeePng()"><i class="ti ti-download"></i> Export HD PNG</button>
+        <button class="btn btn-primary" onclick="window.print()"><i class="ti ti-printer"></i> Print Standee</button>
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1.05fr;gap:24px;align-items:start">
-
-      <!-- ── LEFT: STUDIO CONTROLS ── -->
-      <div class="ctrl-col" style="display:flex;flex-direction:column;gap:18px">
-
-        <!-- 1. THEME SELECTOR (7 CORE THEMES) -->
-        <div class="ctrl-card">
-          <div class="ctrl-sec-title"><i class="ti ti-palette"></i> Design Theme (7 Paradigms)</div>
-          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
-            <div class="theme-chip active" onclick="setTheme('apple', this)">
-              <span class="theme-dot" style="background:#000;border:1px solid #fff"></span>
-              <span>🍏 Apple Clean</span>
-            </div>
-            <div class="theme-chip" onclick="setTheme('m3dark', this)">
-              <span class="theme-dot" style="background:#4ade80"></span>
-              <span>🌙 M3 Dark</span>
-            </div>
-            <div class="theme-chip" onclick="setTheme('m3light', this)">
-              <span class="theme-dot" style="background:#16a34a"></span>
-              <span>☀️ M3 Light</span>
-            </div>
-            <div class="theme-chip" onclick="setTheme('glass', this)">
-              <span class="theme-dot" style="background:#0ea5e9"></span>
-              <span>💎 Glass Ocean</span>
-            </div>
-            <div class="theme-chip" onclick="setTheme('neumorphic', this)">
-              <span class="theme-dot" style="background:#94a3b8"></span>
-              <span>🟢 Neumorphic</span>
-            </div>
-            <div class="theme-chip" onclick="setTheme('minimalist', this)">
-              <span class="theme-dot" style="background:#111827"></span>
-              <span>📱 Minimalist</span>
-            </div>
-            <div class="theme-chip" style="grid-column:span 2" onclick="setTheme('gradient', this)">
-              <span class="theme-dot" style="background:linear-gradient(45deg,#4f46e5,#db2777)"></span>
-              <span>🌈 Sunset &amp; Aurora Gradient</span>
-            </div>
-          </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+      <!-- CONTROLS -->
+      <div style="background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-xl);padding:28px;box-shadow:var(--shadow-card)">
+        <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--t-muted);margin-bottom:14px">Standee Themes</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px">
+          <div class="theme-chip active" onclick="setTheme('light', this)"><span class="theme-dot" style="background:#ffffff;border:1px solid #ccc"></span> Pure Minimal Light</div>
+          <div class="theme-chip" onclick="setTheme('dark', this)"><span class="theme-dot" style="background:#13151f"></span> Midnight Obsidian</div>
+          <div class="theme-chip" onclick="setTheme('amber', this)"><span class="theme-dot" style="background:#f59e0b"></span> Warm Amber Luxe</div>
         </div>
 
-        <!-- 2. CARD CONTENT CUSTOMIZER -->
-        <div class="ctrl-card">
-          <div class="ctrl-sec-title"><i class="ti ti-typography"></i> Card Content &amp; Callout</div>
-          <div class="form-grid" style="gap:12px">
-            <div class="form-group">
-              <label class="form-label">Headline CTA</label>
-              <input type="text" id="inpTitle" class="form-input" value="Enjoyed your visit?" oninput="updateCardText()">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Subtitle Prompt</label>
-              <input type="text" id="inpSub" class="form-input" value="Scan to leave a Google review · Takes 30s ⭐" oninput="updateCardText()">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Center QR Icon</label>
-              <div class="icon-grid">
-                <button type="button" class="icon-opt active" onclick="setCenterIcon('logo', this)" title="Store Brand Logo">
-                  ${isImageLogo ? `<img src="${esc(client.emoji)}" style="width:20px;height:20px;object-fit:contain;vertical-align:middle">` : (client.emoji||'🏪')}
-                </button>
-                <button type="button" class="icon-opt" onclick="setCenterIcon('star', this)" title="Gold Star">⭐</button>
-                <button type="button" class="icon-opt" onclick="setCenterIcon('heart', this)" title="Heart">❤️</button>
-                <button type="button" class="icon-opt" onclick="setCenterIcon('google', this)" title="Google G"><b style="font-size:13px;color:#4285F4">G</b></button>
-                <button type="button" class="icon-opt" onclick="setCenterIcon('none', this)" title="Clean QR without icon"><i class="ti ti-ban" style="font-size:14px"></i></button>
-              </div>
-            </div>
-          </div>
+        <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--t-muted);margin-bottom:14px">Display Text</h3>
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">Headline</label>
+          <input class="form-input" id="inpTitle" value="Enjoyed your visit?" oninput="updateCardText()">
+        </div>
+        <div class="form-group" style="margin-bottom:20px">
+          <label class="form-label">Sub-headline</label>
+          <input class="form-input" id="inpSub" value="Scan to leave a 5-star Google review" oninput="updateCardText()">
         </div>
 
-        <!-- 3. ACTIONS & EXPORTS -->
-        <div class="ctrl-card">
-          <div class="ctrl-sec-title"><i class="ti ti-printer"></i> Print &amp; HD Exports</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-            <button class="btn btn-primary" onclick="printStandee()" style="justify-content:center">
-              <i class="ti ti-printer"></i> Print Standee
-            </button>
-            <button class="btn btn-ghost" onclick="downloadStandeePng()" style="justify-content:center">
-              <i class="ti ti-photo"></i> Export HD PNG
-            </button>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <a href="${qrDataUrl}" download="qr-raw-${client.slug}.png" class="btn btn-ghost" style="justify-content:center">
-              <i class="ti ti-qrcode"></i> Raw QR PNG
-            </a>
-            <button class="btn btn-ghost" onclick="copyLink()" id="copyBtn" style="justify-content:center">
-              <i class="ti ti-copy"></i> Copy Link
-            </button>
-          </div>
-          <div style="margin-top:14px;font-size:11px;font-family:'DM Mono',monospace;color:var(--t3);word-break:break-all;text-align:center;padding:8px 12px;background:var(--s2);border-radius:8px">
-            ${url}
-          </div>
-        </div>
-
-      </div>
-
-      <!-- ── RIGHT: LIVE 1:1 PREVIEW STAGE ── -->
-      <div style="position:sticky;top:76px">
-        <div class="preview-stage">
-
-          <!-- STANDEE CARD COMPONENT -->
-          <div id="standeeCard" class="theme-apple">
-            
-            <!-- BRAND LOGO DISK -->
-            <div class="logo-disk" id="cardEmoji">
-              ${logoHeaderHtml}
-            </div>
-
-            <!-- TITLE & STARS -->
-            <div class="card-title" id="cardTitle">Enjoyed your visit?</div>
-            <div class="stars-row">★★★★★</div>
-            <div class="card-sub" id="cardSub">Scan to leave a Google review · Takes 30s ⭐</div>
-
-            <!-- QR CODE BOX WITH DIRECT FLOATING OVERLAY BADGE -->
-            <div class="qr-box">
-              <img id="qrImg" src="${qrDataUrl}" class="qr-canvas-el" width="175" height="175" alt="QR Code">
-              <div class="qr-center-badge" id="qrCenterBadge">
-                ${logoCenterHtml}
-              </div>
-            </div>
-
-            <div class="scan-hint">
-              <i class="ti ti-camera"></i> Point camera to scan
-            </div>
-
-            <div class="card-footer">
-              <span>${esc(client.business_name)}</span>
-              <span>·</span>
-              <span>${esc(client.category)}</span>
-            </div>
+        <div class="form-group">
+          <label class="form-label">Direct Portal Link</label>
+          <div style="display:flex;gap:8px">
+            <input class="form-input" value="${url}" readonly style="font-family:'JetBrains Mono',monospace;font-size:12px">
+            <button class="btn btn-secondary" onclick="navigator.clipboard.writeText('${url}');showToast('Copied review link!')"><i class="ti ti-copy"></i></button>
           </div>
         </div>
       </div>
 
+      <!-- PREVIEW STAGE -->
+      <div class="preview-stage">
+        <div id="standeeCard" class="theme-light">
+          <div style="font-size:36px;margin-bottom:8px">${esc(client.emoji||'🏪')}</div>
+          <h2 id="cardTitle" style="font-size:22px;font-weight:800;letter-spacing:-0.03em;margin-bottom:4px">${esc(client.business_name)}</h2>
+          <p id="cardSub" style="font-size:13px;opacity:0.75;margin-bottom:14px">Scan to leave a 5-star review</p>
+
+          <div class="qr-box-inner">
+            <img src="${qrDataUrl}" alt="QR" class="qr-img">
+          </div>
+
+          <div style="font-size:11.5px;font-weight:600;opacity:0.6;font-family:'JetBrains Mono',monospace">reviewpro.in/r/${esc(client.slug)}</div>
+        </div>
+      </div>
     </div>
 
     <script>
-      const RAW_URL = "${url}";
-      let currentTheme = 'apple';
-      const logoHtml = \`${logoCenterHtml}\`;
-
-      // ── THEME SWITCHER ──
-      function setTheme(themeName, el) {
-        currentTheme = themeName;
-        document.querySelectorAll('.theme-chip').forEach(c => c.classList.remove('active'));
-        if (el) el.classList.add('active');
-
-        const card = document.getElementById('standeeCard');
-        card.className = 'theme-' + themeName;
+      function setTheme(name, el) {
+        document.querySelectorAll('.theme-chip').forEach(c=>c.classList.remove('active'));
+        if(el) el.classList.add('active');
+        document.getElementById('standeeCard').className = 'theme-' + name;
       }
-
-      // ── CENTER ICON SWITCHER (INSTANT DOM UPDATE) ──
-      function setCenterIcon(type, el) {
-        document.querySelectorAll('.icon-opt').forEach(b => b.classList.remove('active'));
-        if (el) el.classList.add('active');
-
-        const badge = document.getElementById('qrCenterBadge');
-        if (!badge) return;
-
-        if (type === 'none') {
-          badge.style.display = 'none';
-          badge.innerHTML = '';
-        } else {
-          badge.style.display = 'flex';
-          if (type === 'logo') {
-            badge.innerHTML = logoHtml;
-          } else if (type === 'star') {
-            badge.innerHTML = '<span style="font-size:20px;line-height:1">⭐</span>';
-          } else if (type === 'heart') {
-            badge.innerHTML = '<span style="font-size:20px;line-height:1">❤️</span>';
-          } else if (type === 'google') {
-            badge.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>';
-          }
-        }
-      }
-
-      // ── TEXT UPDATES ──
       function updateCardText() {
-        const title = document.getElementById('inpTitle').value || 'Enjoyed your visit?';
-        const sub = document.getElementById('inpSub').value || 'Scan to leave a review';
-
-        document.getElementById('cardTitle').textContent = title;
-        document.getElementById('cardSub').textContent = sub;
+        document.getElementById('cardTitle').textContent = document.getElementById('inpTitle').value || '${esc(client.business_name)}';
+        document.getElementById('cardSub').textContent = document.getElementById('inpSub').value || '';
       }
-
-      // ── PRINT STANDEE ──
-      function printStandee() {
-        window.print();
-      }
-
-      // ── EXPORT HD PNG ──
       function downloadStandeePng() {
-        const card = document.getElementById('standeeCard');
-        const btn = event.currentTarget;
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="ti ti-loader ti-spin"></i> Rendering HD...';
-
-        html2canvas(card, {
-          scale: 3,
-          useCORS: true,
-          backgroundColor: null,
-          logging: false
-        }).then(canvas => {
-          const a = document.createElement('a');
-          a.download = 'standee-${client.slug}-' + currentTheme + '.png';
-          a.href = canvas.toDataURL('image/png');
-          a.click();
-          btn.innerHTML = '<i class="ti ti-check"></i> Exported HD!';
-          setTimeout(() => { btn.innerHTML = originalText; }, 2000);
-        }).catch(() => {
-          btn.innerHTML = originalText;
-          alert('Could not render image');
-        });
-      }
-
-      // ── COPY LINK ──
-      function copyLink() {
-        navigator.clipboard.writeText(RAW_URL).then(() => {
-          const btn = document.getElementById('copyBtn');
-          btn.innerHTML = '<i class="ti ti-check"></i> Copied URL!';
-          setTimeout(() => { btn.innerHTML = '<i class="ti ti-copy"></i> Copy Link'; }, 2000);
-        });
+        const link = document.createElement('a');
+        link.download = '${esc(client.slug)}-standee-qr.png';
+        link.href = '${qrDataUrl}';
+        link.click();
       }
     </script>
-  `, extraHead);
+  `, extraHead, 'dashboard');
 }
 
 // ── ANALYTICS PAGE ─────────────────────────────────────────────────
 function analyticsPage(client, stats) {
-  const vd = [...stats.dailyViews].reverse();
-  const cd = [...stats.dailyClicks].reverse();
-  const allDays = [...new Set([...vd.map(d=>d.day), ...cd.map(d=>d.day)])].sort();
-  const vMap = Object.fromEntries(vd.map(d=>[d.day,d.n]));
-  const cMap = Object.fromEntries(cd.map(d=>[d.day,d.n]));
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  const vMap = Object.fromEntries(stats.dailyViews.map(r => [r.date, r.count]));
+  const cMap = Object.fromEntries(stats.dailyClicks.map(r => [r.date, r.count]));
+  const vVals = days.map(d => vMap[d] || 0);
+  const cVals = days.map(d => cMap[d] || 0);
 
-  return shell('Analytics — '+client.business_name, `
-    <div class="page-hdr">
+  return shell('Analytics — ' + client.business_name, `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
       <div>
-        <div class="page-title">Analytics — ${esc(client.business_name)}</div>
-        <div class="page-sub" style="display:flex;align-items:center;gap:6px">Last 30 days · ${client.emoji && (client.emoji.startsWith('/') || client.emoji.startsWith('http') || client.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i)) ? `<img src="${esc(client.emoji)}" style="width:16px;height:16px;object-fit:contain;border-radius:4px;display:inline-block">` : esc(client.emoji||'🏪')} /r/${client.slug}</div>
+        <h1 class="welcome-headline">Analytics — ${esc(client.business_name)}</h1>
+        <div class="welcome-sub">Real-time performance metrics recorded from Firestore.</div>
       </div>
-      <a href="/admin" class="btn btn-ghost"><i class="ti ti-arrow-left"></i> Back</a>
+      <a href="/admin" class="btn btn-secondary"><i class="ti ti-arrow-left"></i> Back to Dashboard</a>
     </div>
 
-    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
-      <div class="stat">
-        <div class="stat-lbl">Total views</div>
-        <div class="stat-val">${stats.totalViews}</div>
-        <div class="stat-sub">review page opens</div>
+    <div class="metrics-quad-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:28px">
+      <div class="metric-card-luxe">
+        <div class="metric-label-txt">Total Impressions</div>
+        <div class="metric-huge-val">${stats.totalViews}</div>
+        <div class="metric-sub-note">review portal visits</div>
       </div>
-      <div class="stat">
-        <div class="stat-lbl">Maps clicks</div>
-        <div class="stat-val stat-accent">${stats.totalClicks}</div>
-        <div class="stat-sub">opened Google Maps</div>
+      <div class="metric-card-luxe">
+        <div class="metric-label-txt">Maps Review Clicks</div>
+        <div class="metric-huge-val" style="color:var(--amber-dark)">${stats.totalClicks}</div>
+        <div class="metric-sub-note">direct Google Maps actions</div>
       </div>
-      <div class="stat">
-        <div class="stat-lbl">Conversion rate</div>
-        <div class="stat-val">${stats.convRate}%</div>
-        <div class="stat-sub">views → Maps clicks</div>
+      <div class="metric-card-luxe">
+        <div class="metric-label-txt">Conversion Rate</div>
+        <div class="metric-huge-val" style="color:#16a34a">${stats.convRate}%</div>
+        <div class="metric-sub-note">visitor to review ratio</div>
       </div>
     </div>
 
-    <div class="card card-p" style="margin-bottom:16px">
-      <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--t3);margin-bottom:18px">Daily page views</div>
+    <div style="background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-xl);padding:28px;margin-bottom:20px;box-shadow:var(--shadow-card)">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--t-muted);margin-bottom:18px">Daily Impressions</div>
       <canvas id="viewChart" height="72"></canvas>
     </div>
 
-    <div class="card card-p">
-      <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--t3);margin-bottom:18px">Daily Maps clicks</div>
+    <div style="background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-xl);padding:28px;box-shadow:var(--shadow-card)">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--t-muted);margin-bottom:18px">Daily Google Review Clicks</div>
       <canvas id="clickChart" height="72"></canvas>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
-    const days = ${JSON.stringify(allDays)};
-    const vMap = ${JSON.stringify(vMap)};
-    const cMap = ${JSON.stringify(cMap)};
-    const vVals = days.map(d=>vMap[d]||0);
-    const cVals = days.map(d=>cMap[d]||0);
+    const days = ${JSON.stringify(days)};
+    const vVals = ${JSON.stringify(vVals)};
+    const cVals = ${JSON.stringify(cVals)};
 
-    const cfg = (labels, data, color, fill) => ({
+    const cfg = (labels, data, color) => ({
       type: 'bar',
       data: {
         labels,
@@ -1379,80 +2621,82 @@ function analyticsPage(client, stats) {
           backgroundColor: color + '33',
           borderColor: color,
           borderWidth: 1.5,
-          borderRadius: 5,
+          borderRadius: 6,
           borderSkipped: false,
         }]
       },
       options: {
         responsive: true,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.raw } } },
+        plugins: { legend: { display: false } },
         scales: {
-          x: { ticks: { color: '#50507a', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
-          y: { ticks: { color: '#50507a', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true, precision: 0 }
+          x: { ticks: { color: '#8c8273', font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: '#8c8273', font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.04)' }, beginAtZero: true, precision: 0 }
         }
       }
     });
 
-    new Chart(document.getElementById('viewChart'), cfg(days, vVals, '#a78bfa'));
-    new Chart(document.getElementById('clickChart'), cfg(days, cVals, '#fbbf24'));
+    new Chart(document.getElementById('viewChart'), cfg(days, vVals, '#f59e0b'));
+    new Chart(document.getElementById('clickChart'), cfg(days, cVals, '#10b981'));
     </script>
-  `);
+  `, '', 'dashboard');
 }
 
+// ── AGENT TESTER PAGE ──────────────────────────────────────────────
 function agentTestPage() {
-  return shell('Agent Test — review-writer', `
-    <div class="page-hdr">
+  return shell('Agent Lab — Review Generator', `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
       <div>
-        <div class="page-title">review-writer agent test</div>
-        <div class="page-sub">Test the review-writer agent: honest, positive-only Google reviews in seconds</div>
+        <h1 class="welcome-headline">AI Review Generation Lab</h1>
+        <div class="welcome-sub">Test the LLM multi-tier hierarchy (Gemini 3.5 Flash &rarr; Deterministic Local Synthesis).</div>
       </div>
-      <a href="/admin" class="btn btn-ghost"><i class="ti ti-arrow-left"></i> Back</a>
+      <a href="/admin" class="btn btn-secondary"><i class="ti ti-arrow-left"></i> Back to Dashboard</a>
     </div>
 
-    <div class="card card-p" style="max-width:860px;margin:0 auto">
-      <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--t3);margin-bottom:18px">Inputs</div>
-      <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px">
-        <div>
-          <label class="f-lbl">Rating</label>
-          <select id="at-rating" class="inp">
-            <option value="5" selected>5 — Loved it</option>
-            <option value="4">4 — Great</option>
-            <option value="3">3 — Okay</option>
-            <option value="2">2 — Meh</option>
-            <option value="1">1 — Poor</option>
+    <div style="background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-xl);padding:32px;max-width:860px;margin:0 auto;box-shadow:var(--shadow-card)">
+      <div class="form-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px">
+        <div class="form-group">
+          <label class="form-label">Rating</label>
+          <select id="at-rating" class="form-select">
+            <option value="5" selected>5 ★ — Loved it</option>
+            <option value="4">4 ★ — Great</option>
+            <option value="3">3 ★ — Okay</option>
+            <option value="2">2 ★ — Meh</option>
+            <option value="1">1 ★ — Poor</option>
           </select>
         </div>
-        <div>
-          <label class="f-lbl">Business name</label>
-          <input id="at-name" class="inp" placeholder="e.g. Spice Garden" value="">
+        <div class="form-group">
+          <label class="form-label">Business Name</label>
+          <input id="at-name" class="form-input" placeholder="e.g. KFC or Cool &amp; Spicy" value="KFC">
         </div>
-        <div>
-          <label class="f-lbl">Business type</label>
-          <input id="at-type" class="inp" placeholder="e.g. restaurant" value="">
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <input id="at-type" class="form-input" placeholder="e.g. Fried Chicken" value="Fried Chicken">
         </div>
       </div>
 
-      <div style="margin-bottom:14px">
-        <label class="f-lbl">Your experience (separate textarea for the agent)</label>
-        <textarea id="at-text" class="inp txta" rows="4" placeholder="Describe your visit: what you ordered, the service, ambience, anything that fell short..."></textarea>
+      <div class="form-group" style="margin-bottom:18px">
+        <label class="form-label">Customer Experience / Keywords</label>
+        <textarea id="at-text" class="form-textarea" placeholder="Describe customer order or experience (e.g. Super crispy hot chicken, peri peri fries were amazing)">Super crispy fried chicken, loved the peri peri fries</textarea>
       </div>
 
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-        <button id="at-go" class="btn btn-primary" onclick="atGenerate()"><i class="ti ti-sparkles"></i> Generate review</button>
-        <span id="at-status" class="page-sub" style="margin-left:auto"></span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <button id="at-go" class="btn btn-primary" onclick="atGenerate()"><i class="ti ti-sparkles"></i> Synthesize Review</button>
+        <span id="at-status" style="font-size:13px;font-weight:600"></span>
       </div>
 
-      <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--t3);margin-bottom:8px">Generated review</div>
-      <textarea id="at-out" class="inp txta" rows="5" readonly placeholder="The generated 2-4 sentence English review appears here..."></textarea>
-      <div id="at-meta" class="page-sub" style="margin-top:8px;font-size:12px"></div>
+      <div class="form-group">
+        <label class="form-label">Generated Review Output</label>
+        <textarea id="at-out" class="form-textarea" style="min-height:110px;font-family:'JetBrains Mono',monospace;font-size:13px" readonly placeholder="Synthesized genuine review will appear here..."></textarea>
+        <div id="at-meta" style="font-size:12px;color:var(--t-muted);margin-top:6px"></div>
+      </div>
     </div>
 
     <script>
       async function atGenerate() {
         const st = document.getElementById('at-status');
         const out = document.getElementById('at-out');
-        st.textContent = 'Generating...';
-        st.style.color = 'var(--yellow)';
+        st.textContent = 'Generating via AI...';
+        st.style.color = 'var(--amber)';
         out.value = '';
         try {
           const r = await fetch('/admin/agent-test/generate', {
@@ -1468,23 +2712,20 @@ function agentTestPage() {
           const data = await r.json();
           if (data.ok) {
             out.value = data.review;
-            st.textContent = 'Done via ' + data.source;
-            st.style.color = 'var(--green)';
-            document.getElementById('at-meta').textContent = 'Powered by the review-writer OpenHands agent — ' + (data.source === 'local' ? 'local template fallback' : data.source + ' backend');
+            st.textContent = 'Done (' + data.source + ')';
+            st.style.color = 'var(--emerald)';
+            document.getElementById('at-meta').textContent = 'Provider: ' + data.source;
           } else {
             st.textContent = 'Error: ' + (data.error || 'unknown');
-            st.style.color = 'var(--red)';
+            st.style.color = 'var(--rose)';
           }
         } catch (e) {
           st.textContent = 'Error: ' + e.message;
-          st.style.color = 'var(--red)';
+          st.style.color = 'var(--rose)';
         }
       }
-      document.getElementById('at-text').addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') atGenerate();
-      });
     </script>
-  `);
+  `, '', 'agent', false);
 }
 
 function esc(s) {

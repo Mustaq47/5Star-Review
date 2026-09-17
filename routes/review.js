@@ -1,8 +1,9 @@
 const express = require('express');
-const db = require('../db/setup');
+const { getClientBySlug, recordPageView, recordReviewClick } = require('../db/firestore');
 const { getTagsForRating, generateReview, suggestNextWords, suggestNextWordsAsync } = require('../services/ragflowAgent');
 const { generateReviewWithAgent } = require('../services/reviewWriterAgent');
 const { aiLimiter } = require('../middleware/security');
+const { validateBody, reviewGenerateSchema, reviewSuggestSchema } = require('../middleware/validator');
 const router = express.Router();
 
 function isClientValid(client) {
@@ -12,12 +13,12 @@ function isClientValid(client) {
 }
 
 router.get('/:slug', async (req, res) => {
-  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  const client = await getClientBySlug(req.params.slug);
   if (!client || !client.active) return res.status(404).send(notFound());
   if (client.expires_at && new Date(client.expires_at).getTime() < Date.now()) {
     return res.status(410).send(expiredPage(client));
   }
-  db.prepare('INSERT INTO pageviews (client_id) VALUES (?)').run(client.id);
+  await recordPageView(client.id, client.slug);
   const initialTags = await getTagsForRating(5, 8, client);
   res.send(reviewPage(client, initialTags));
 });
@@ -25,7 +26,7 @@ router.get('/:slug', async (req, res) => {
 // Dynamic Rating-based Tags API (now Gemini-powered)
 router.get('/:slug/tags', aiLimiter, async (req, res) => {
   const rating = parseInt(req.query.rating) || 5;
-  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+  const client = await getClientBySlug(req.params.slug);
   if (!isClientValid(client)) {
     return res.status(403).json({ ok: false, error: 'Review link expired or inactive' });
   }
@@ -38,9 +39,9 @@ router.get('/:slug/tags', aiLimiter, async (req, res) => {
 });
 
 // Review Generator API (Hierarchy: AI [Gemini, OpenAI] → Review-Writer Agent → Local Synthesizer)
-router.post('/:slug/generate', aiLimiter, async (req, res) => {
-  const { rating, tags, previousText } = req.body;
-  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+router.post('/:slug/generate', aiLimiter, validateBody(reviewGenerateSchema), async (req, res) => {
+  const { rating, tags, previousText } = req.validData || req.body;
+  const client = await getClientBySlug(req.params.slug);
   if (!isClientValid(client)) {
     return res.status(403).json({ ok: false, error: 'Review link expired or inactive' });
   }
@@ -60,9 +61,9 @@ router.post('/:slug/generate', aiLimiter, async (req, res) => {
 });
 
 // RAGFlow Agent Next-Word Prediction API (Gemini + Local)
-router.post('/:slug/suggest', aiLimiter, async (req, res) => {
-  const { text, rating } = req.body;
-  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+router.post('/:slug/suggest', aiLimiter, validateBody(reviewSuggestSchema), async (req, res) => {
+  const { text, rating } = req.validData || req.body;
+  const client = await getClientBySlug(req.params.slug);
   if (!isClientValid(client)) {
     return res.status(403).json({ ok: false, error: 'Review link expired or inactive' });
   }
@@ -80,9 +81,9 @@ router.post('/:slug/suggest', aiLimiter, async (req, res) => {
 });
 
 // Poll endpoint: returns the cached/best Gemini result once ready.
-router.post('/:slug/suggest/enhance', aiLimiter, async (req, res) => {
-  const { text, rating } = req.body;
-  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
+router.post('/:slug/suggest/enhance', aiLimiter, validateBody(reviewSuggestSchema), async (req, res) => {
+  const { text, rating } = req.validData || req.body;
+  const client = await getClientBySlug(req.params.slug);
   if (!isClientValid(client)) {
     return res.json({ ok: true, ready: false });
   }
@@ -101,9 +102,11 @@ router.post('/:slug/suggest/enhance', aiLimiter, async (req, res) => {
   }
 });
 
-router.post('/:slug/click', (req, res) => {
-  const client = db.prepare('SELECT * FROM clients WHERE slug=?').get(req.params.slug);
-  if (client && isClientValid(client)) db.prepare('INSERT INTO review_clicks (client_id) VALUES (?)').run(client.id);
+router.post('/:slug/click', async (req, res) => {
+  const client = await getClientBySlug(req.params.slug);
+  if (client && isClientValid(client)) {
+    await recordReviewClick(client.id, client.slug);
+  }
   res.json({ ok: true });
 });
 

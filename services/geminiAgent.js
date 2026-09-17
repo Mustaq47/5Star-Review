@@ -11,7 +11,7 @@
 // Falls back to local engine if Gemini is unavailable.
 // ═══════════════════════════════════════════════════════════════
 
-const db = require('../db/setup');
+const { addReviewMemory, getRecentReviewMemory, getRecentTagsFromMemory } = require('../db/firestore');
 const path = require('path');
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'gemini-embedding-001';
@@ -390,8 +390,8 @@ function cosineSimilarity(a, b) {
 // Find similar past reviews to avoid repetition
 async function findSimilarReviews(clientId, newReview, rating, threshold = 0.75) {
   try {
-    const past = db.prepare('SELECT review_text, embedding FROM review_memory WHERE client_id = ? AND rating = ? ORDER BY created_at DESC LIMIT 20').all(clientId, rating);
-    if (past.length === 0) return [];
+    const past = await getRecentReviewMemory(clientId, rating, 20);
+    if (!past || past.length === 0) return [];
 
     const newEmbedding = await getEmbedding(newReview);
     if (!newEmbedding) return [];
@@ -399,7 +399,7 @@ async function findSimilarReviews(clientId, newReview, rating, threshold = 0.75)
     const similar = [];
     for (const p of past) {
       try {
-        const pastEmbedding = JSON.parse(p.embedding);
+        const pastEmbedding = Array.isArray(p.embedding) ? p.embedding : JSON.parse(p.embedding);
         const sim = cosineSimilarity(newEmbedding, pastEmbedding);
         if (sim > threshold) similar.push(p.review_text);
       } catch (e) { /* ignore parse errors */ }
@@ -416,7 +416,7 @@ async function storeReviewMemory(clientId, rating, tags, reviewText) {
   try {
     const embedding = await getEmbedding(reviewText);
     if (!embedding) return;
-    db.prepare('INSERT INTO review_memory (client_id, rating, tags, review_text, embedding) VALUES (?, ?, ?, ?, ?)').run(clientId, rating, JSON.stringify(tags), reviewText, JSON.stringify(embedding));
+    await addReviewMemory({ clientId, rating, tags, reviewText, embedding });
   } catch (e) {
     console.warn('[geminiAgent] Failed to store review memory:', e.message);
   }
@@ -428,11 +428,11 @@ async function storeReviewMemory(clientId, rating, tags, reviewText) {
 
 async function getLearnedTags(clientId) {
   try {
-    const rows = db.prepare('SELECT tags FROM review_memory WHERE client_id = ? ORDER BY created_at DESC LIMIT 50').all(clientId);
+    const rows = await getRecentTagsFromMemory(clientId, 50);
     const tagCounts = {};
     for (const row of rows) {
       try {
-        const tags = JSON.parse(row.tags);
+        const tags = typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags || []);
         for (const tag of tags) {
           const key = typeof tag === 'string' ? tag.toLowerCase() : (tag.l || tag.label || '');
           if (key) tagCounts[key] = (tagCounts[key] || 0) + 1;
@@ -448,8 +448,8 @@ async function getLearnedTags(clientId) {
 // Extract emerging themes from recent reviews
 async function getEmergingThemes(clientId, days = 7) {
   try {
-    const rows = db.prepare("SELECT review_text FROM review_memory WHERE client_id = ? AND created_at > datetime('now', '-7 days')").all(clientId);
-    if (rows.length < 3) return [];
+    const rows = await getRecentReviewMemory(clientId, null, 20);
+    if (!rows || rows.length < 3) return [];
 
     const prompt = `Extract 3-5 emerging themes/positive aspects from these recent customer reviews:\n\n${rows.slice(0, 10).map(r => r.review_text).join('\n---\n')}\n\nOutput as comma-separated phrases like: "friendly staff", "quick service", "great ambiance".`;
     const themes = await callGemini(prompt, { temperature: 0.5, maxTokens: 100 });
@@ -694,8 +694,8 @@ Output only the polished review.`;
 
 async function analyzeReviewStyle(clientId) {
   try {
-    const reviews = db.prepare('SELECT review_text FROM review_memory WHERE client_id = ? ORDER BY created_at DESC LIMIT 20').all(clientId);
-    if (reviews.length < 5) return null;
+    const reviews = await getRecentReviewMemory(clientId, null, 20);
+    if (!reviews || reviews.length < 5) return null;
 
     const text = reviews.map(r => r.review_text).join('\n---\n');
     const prompt = `Analyze the style of these customer reviews. Output JSON with:\n- "avg_length": average word count\n- "common_phrases": array of 3-5 frequently used phrases\n- "tone": overall tone description\n- "suggestions": 2-3 tips for writing similar reviews\n\nReviews:\n${text.slice(0, 2000)}`;

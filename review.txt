@@ -1,0 +1,189 @@
+================================================================================
+                           REVIEWPRO — ARCHITECTURE & REVIEW ENGINE
+================================================================================
+
+1. PROJECT OVERVIEW
+--------------------------------------------------------------------------------
+ReviewPro is a multi-tenant Google Review collection and conversion platform designed 
+for local businesses (restaurants, cafes, retail, services). It provides branded 
+mobile review portals, dynamic rating-calibrated tags, AI-assisted review generation, 
+type-ahead autocomplete, QR standee generation, and conversion analytics backed by 
+Google Cloud Firestore.
+
+
+2. COMPLETE FILE STRUCTURE
+--------------------------------------------------------------------------------
+reviewpro/
+├── server.js               # Express entry point, middleware pipeline & /healthz
+├── seed.js                 # Firestore seeder (Admin, Cool & Spicy, KFC, Spice Garden)
+├── Dockerfile              # Production Dockerfile (node:20-bookworm-slim, USER node)
+├── vercel.json             # Vercel serverless rewrite rules & public asset mapping
+├── railway.json            # Railway deployment configuration
+├── package.json            # Project dependencies and npm scripts
+├── review.txt              # System architecture & review engine documentation
+│
+├── api/
+│   └── index.js            # Vercel Serverless Function entry point
+│
+├── db/
+│   └── firestore.js        # Google Cloud Firestore data layer (CRUD, metrics, memory)
+│
+├── middleware/
+│   ├── auth.js             # Session-based authentication guard for /admin
+│   └── security.js         # Security headers (HSTS, CSP) & rate limiters
+│
+├── routes/
+│   ├── admin.js            # Admin console (Modern Warm Editorial UI, CRUD, QR, stats)
+│   └── review.js           # Public review flow (/r/:slug), tag APIs, autocomplete, clicks
+│
+├── services/
+│   ├── geminiAgent.js      # Primary AI LLM (Gemini 3.5 Flash, embeddings, vector memory)
+│   ├── ragflowAgent.js     # Context-aware next-word suggestion & tag synthesis engine
+│   └── reviewWriterAgent.js# Fallback review synthesizer & prompt reframing
+│
+├── public/                 # Static assets (images, logos, favicon, client scripts)
+│   ├── agentation.js       # Client feedback widget
+│   └── images/             # Business logo emblems (cool-and-spicy, kfc, etc.)
+│
+└── .env.example            # Environment variables template
+
+
+3. HOW THE REVIEW SECTION WORKS (STEP-BY-STEP)
+--------------------------------------------------------------------------------
+
+[Step 1: Visitor Arrival & Portal Initialization]
+------------------------------------------------
+- Customer scans a tabletop QR code or opens a short link (e.g. /r/cool-and-spicy).
+- Route Handler (`GET /r/:slug` in routes/review.js) executes:
+  1. Fetches client document from Cloud Firestore (`clients` collection) by slug.
+  2. Verifies client is active and validity timer hasn't expired.
+  3. Asynchronously records a page impression (`pageviews` collection).
+  4. Calls AI service to load initial 5-star tags tailored to this business.
+  5. Renders a mobile-optimized branded review page styled with the business's
+     emblem, brand color, and configured theme (Dark, Light, or Auto).
+
+[Step 2: Dynamic Rating-Calibrated Tag System]
+----------------------------------------------
+- Endpoint: `GET /r/:slug/tags?rating=N`
+- When the customer taps a rating (1 to 5 stars), the client makes an async fetch.
+- The AI Engine (`services/ragflowAgent.js` & `services/geminiAgent.js`):
+  * 5 Stars: Returns high-enthusiasm tags (signature dishes, fairy lights, hospitality).
+  * 4 Stars: Returns warm, positive tags (good portions, quick service, solid taste).
+  * 1-3 Stars: Returns balanced, polite, and constructive tags.
+- Tag Learning: Inspects past positive reviews stored in Firestore to promote items
+  frequently loved by customers (e.g. "Peri Peri Fries", "Zinger Burger").
+
+[Step 3: Intelligent Next-Word Predictive Autocomplete (Type-Ahead)]
+--------------------------------------------------------------------
+- Endpoint: `POST /r/:slug/suggest`
+- As the customer types in the review box (e.g., "The chicken was..."):
+  1. Engine analyzes the text prefix + star rating + business category.
+  2. Generates a seamless continuation:
+     - Primary Continuation: Rendered as inline ghost text (Press Tab to accept).
+     - Alternative Pills: Up to 3 tappable chips for quick one-touch sentence expansion.
+  3. Two-phase delivery: Instant local suggestion returned in <50ms, while a background
+     Gemini AI prediction enhances the options asynchronously (`/suggest/enhance`).
+
+[Step 4: AI Review Synthesis & Semantic Anti-Repetition Memory]
+---------------------------------------------------------------
+- Endpoint: `POST /r/:slug/generate`
+- When customer selects multiple tags and taps "Write Review with AI":
+  1. Multi-Tier Fallback:
+     - Tier 1: Google Gemini 3.5 Flash generates a casual, genuine 1-2 sentence review.
+     - Tier 2: NVIDIA NIM (DeepSeek / Llama) fallback if Gemini quota is exceeded.
+     - Tier 3: Local multi-domain lexicon synthesizer if internet is offline.
+  2. Semantic Vector Memory:
+     - Calculates 768-dimensional embedding vector via `gemini-embedding-001`.
+     - Checks cosine similarity against the last 20 reviews for this business in Firestore.
+     - If similarity > 0.75 (too similar to an existing review), it re-synthesizes.
+     - Saves the new review + embedding to the `review_memory` Firestore collection.
+     - Result: Every customer receives a unique, authentic review that looks 100% human.
+
+[Step 5: 1-Click Clipboard Copy & Google Maps Direct Redirection]
+-----------------------------------------------------------------
+- Endpoint: `POST /r/:slug/click`
+- Customer taps "Copy & Open Google Reviews":
+  1. Review text is automatically copied to device clipboard (`navigator.clipboard.writeText`).
+  2. Sends an async tracking beacon to Firestore (`review_clicks` collection).
+  3. Instantly opens the business's direct Google Maps Place ID review intent:
+     `https://search.google.com/local/writereview?placeid={place_id}`
+  4. Customer lands directly on the native 5-star Google review box, pastes text, and taps Post.
+
+
+4. FIRESTORE DATABASE SCHEMA
+--------------------------------------------------------------------------------
+
+Collection: `admins`
+  - id: Document ID
+  - email: String (unique, lowercase)
+  - password: String (bcrypt hash)
+  - created_at: Timestamp
+
+Collection: `clients`
+  - id: Document ID
+  - slug: String (unique, URL identifier)
+  - business_name: String
+  - category: String
+  - description: String
+  - emoji: String (emoji or image URL)
+  - place_id: String (Google Place ID)
+  - primary_color: String (Hex color)
+  - primary_theme: String ('dark' | 'light' | 'system')
+  - allow_theme_toggle: Number (1 | 0)
+  - tags: String (JSON array of {l, t})
+  - active: Number (1 | 0)
+  - expires_at: Timestamp | null
+  - created_at: Timestamp
+
+Collection: `pageviews`
+  - id: Document ID
+  - client_id: String
+  - client_slug: String
+  - viewed_at: Timestamp
+
+Collection: `review_clicks`
+  - id: Document ID
+  - client_id: String
+  - client_slug: String
+  - clicked_at: Timestamp
+
+Collection: `review_memory`
+  - id: Document ID
+  - client_id: String
+  - rating: Number
+  - tags: String (JSON array)
+  - review_text: String
+  - embedding: Array<Number> (768-dim float vector)
+  - created_at: Timestamp
+
+
+5. API ENDPOINTS REFERENCE
+--------------------------------------------------------------------------------
+
+PUBLIC REVIEW ROUTES:
+  - GET  /r/:slug                Renders customer review portal
+  - GET  /r/:slug/tags           Fetches dynamic rating tags
+  - POST /r/:slug/generate       Generates AI review from tags/text
+  - POST /r/:slug/suggest        Type-ahead predictive autocomplete
+  - POST /r/:slug/suggest/enhance Polls enhanced Gemini suggestion
+  - POST /r/:slug/click          Tracks Google Maps click conversion
+
+ADMIN ROUTES:
+  - GET  /admin/login            Renders login page
+  - POST /admin/login            Authenticates admin session
+  - GET  /admin/logout           Destroys admin session
+  - GET  /admin                  Modern Warm Editorial dashboard
+  - GET  /admin/clients/new      New client form
+  - POST /admin/clients/new      Creates new client in Firestore
+  - GET  /admin/clients/:id/edit Edit client form
+  - POST /admin/clients/:id/edit Updates client in Firestore
+  - POST /admin/clients/:id/delete Deletes client & metrics from Firestore
+  - POST /admin/clients/:id/quick-theme Instant theme toggle endpoint
+  - GET  /admin/clients/:id/qr   Interactive QR Standee Studio
+  - GET  /admin/clients/:id/analytics Real-time impressions & click charts
+  - GET  /admin/agent-test       AI review writer playground
+  - POST /admin/agent-test/generate Test generation endpoint
+
+SYSTEM:
+  - GET  /healthz                Liveness/readiness health check
+================================================================================
