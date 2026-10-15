@@ -121,6 +121,15 @@ function getExpiryInfo(client) {
   return { status: 'active', label: `${diffMonths}mo left`, badgeClass: 'badge-emerald', dot: true };
 }
 
+function sanitizeEmoji(val) {
+  if (!val) return '🏪';
+  let str = String(val).trim().replace(/^["']|["']$/g, '');
+  if (str.includes('public/images/') || str.includes('public\\images\\') || (/^[a-zA-Z]:[/\\]/.test(str) && str.includes('images'))) {
+    str = '/images/' + str.split(/[/\\]images[/\\]/).pop().replace(/^["']|["']$/g, '');
+  }
+  return str || '🏪';
+}
+
 router.post('/clients/new', requireAuth, verifyAdminCsrf, validateBody(clientInputSchema, false), async (req, res) => {
   const data = req.validData || req.body;
   const slug = data.business_name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + Date.now().toString(36);
@@ -133,7 +142,7 @@ router.post('/clients/new', requireAuth, verifyAdminCsrf, validateBody(clientInp
       business_name: data.business_name,
       category: data.category,
       description: data.description,
-      emoji: data.emoji || '🏪',
+      emoji: sanitizeEmoji(data.emoji),
       place_id: data.place_id,
       primary_color: data.primary_color || '#7c4dff',
       primary_theme: themeMode,
@@ -172,7 +181,7 @@ router.post('/clients/:id/edit', requireAuth, verifyAdminCsrf, validateBody(clie
       business_name: data.business_name,
       category: data.category,
       description: data.description,
-      emoji: data.emoji || '🏪',
+      emoji: sanitizeEmoji(data.emoji),
       place_id: data.place_id,
       primary_color: data.primary_color || '#7c4dff',
       primary_theme: themeMode,
@@ -1688,7 +1697,8 @@ function dashboardPage(clients, telemetry = {}) {
   const bizCardsHtml = clients.map(c => {
     const cr = c.views > 0 ? ((c.clicks / c.views) * 100).toFixed(0) : 0;
     const expInfo = getExpiryInfo(c);
-    const isImg = c.emoji && (c.emoji.startsWith('/') || c.emoji.startsWith('http') || c.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i));
+    const emojiStr = sanitizeEmoji(c.emoji);
+    const isImg = emojiStr && (emojiStr.startsWith('/') || emojiStr.startsWith('http') || emojiStr.match(/\.(png|jpg|jpeg|svg|webp)$/i));
     const accent = c.primary_color || '#f59e0b';
 
     return `
@@ -1696,7 +1706,7 @@ function dashboardPage(clients, telemetry = {}) {
       <div>
         <div class="biz-card-head">
           <div class="biz-avatar-box">
-            ${isImg ? `<img src="${esc(c.emoji)}" alt="${esc(c.business_name)}">` : esc(c.emoji || '🏪')}
+            ${isImg ? `<img src="${esc(emojiStr)}" alt="${esc(c.business_name)}">` : esc(emojiStr)}
           </div>
           <div class="biz-meta-info">
             <div class="biz-meta-name" title="${esc(c.business_name)}">${esc(c.business_name)}</div>
@@ -2299,7 +2309,7 @@ function clientFormPage(client, error) {
 
           <div class="form-group">
             <label class="form-label">Avatar Emoji or Logo Image URL</label>
-            <input class="form-input" type="text" name="emoji" value="${esc(client?.emoji||'🏪')}" placeholder="🏪 or https://example.com/logo.png">
+            <input class="form-input" type="text" name="emoji" value="${esc(client ? sanitizeEmoji(client.emoji) : '🏪')}" placeholder="🏪 or /images/kfc-logo.png">
           </div>
 
           ${isEdit ? `

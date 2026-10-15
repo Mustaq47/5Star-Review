@@ -170,11 +170,15 @@ function reviewPage(client, tags) {
     ? '<span class="c-cool">COOL</span> <span class="c-and">&amp;</span> <span class="c-spicy">SPICY</span>'
     : esc(client.business_name);
 
-  const hasLogo = Boolean(client.emoji && client.emoji.trim() !== '' && client.emoji !== 'none' && client.emoji !== 'null');
-  const isImageLogo = hasLogo && (client.emoji.startsWith('/') || client.emoji.startsWith('http') || client.emoji.match(/\.(png|jpg|jpeg|svg|webp)$/i));
+  let cleanEmoji = (client.emoji || '').trim().replace(/^["']|["']$/g, '');
+  if (cleanEmoji.includes('public/images/') || cleanEmoji.includes('public\\images\\') || (/^[a-zA-Z]:[/\\]/.test(cleanEmoji) && cleanEmoji.includes('images'))) {
+    cleanEmoji = '/images/' + cleanEmoji.split(/[/\\]images[/\\]/).pop().replace(/^["']|["']$/g, '');
+  }
+  const hasLogo = Boolean(cleanEmoji && cleanEmoji !== 'none' && cleanEmoji !== 'null');
+  const isImageLogo = hasLogo && (cleanEmoji.startsWith('/') || cleanEmoji.startsWith('http') || cleanEmoji.match(/\.(png|jpg|jpeg|svg|webp)$/i));
   const logoHtml = isImageLogo
-    ? `<img src="${esc(client.emoji)}" alt="${esc(client.business_name)} Logo">`
-    : (hasLogo ? esc(client.emoji) : '');
+    ? `<img src="${esc(cleanEmoji)}" alt="${esc(client.business_name)} Logo">`
+    : (hasLogo ? esc(cleanEmoji) : '');
 
   return `<!DOCTYPE html>
 <html lang="en">
